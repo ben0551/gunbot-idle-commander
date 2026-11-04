@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#080a12">
+<title>Gunbot Idle Commander</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="resblock">
+      <div class="resline"><span class="ico cred">₡</span><span id="hud-money" class="val">0</span></div>
+      <div class="sub" id="hud-mps">+0/s</div>
+    </div>
+    <div class="lvlblock">
+      <div class="lvlrow">
+        <span id="hud-level">LV 1</span>
+        <span id="hud-tier" class="tierchip">WOOD</span>
+      </div>
+      <div class="xpbar"><div id="hud-xpfill"></div><span id="hud-xptext">0 / 0</span></div>
+    </div>
+    <div class="resblock right">
+      <div class="resline"><span class="ico troph">★</span><span id="hud-trophies" class="val">0</span></div>
+      <div class="sub" id="hud-wins">0 wins</div>
+    </div>
+  </header>
+
+  <main id="screens">
+
+    <!-- ============ HANGAR ============ -->
+    <section id="screen-hangar" class="screen active">
+      <div class="hero-card" id="hero-card">
+        <canvas id="hero-portrait" width="120" height="150"></canvas>
+        <div class="hero-info">
+          <div class="hero-name">ACE UNIT <span class="mk" id="hero-mk">MK1</span></div>
+          <div class="hero-sub" id="hero-stats">HP 300 · ATK 26</div>
+          <div class="hero-sub dim" id="hero-next">Evolution at level 5</div>
+          <button class="btn gold" id="hero-upgrade">UPGRADE · 120</button>
+        </div>
+        <div class="hero-lvl"><span id="hero-lvl">1</span><span class="tiny">LVL</span></div>
+      </div>
+
+      <div class="sect-head">
+        <h2>HANGAR</h2>
+        <div class="fieldinfo">FIELDED <b id="field-count">0</b>/9</div>
+      </div>
+      <div id="tier-banner" class="tier-banner"></div>
+      <div id="unit-grid" class="unit-grid"></div>
+      <div class="footpad"></div>
+    </section>
+
+    <!-- ============ BATTLE ============ -->
+    <section id="screen-battle" class="screen">
+      <div class="stagebar">
+        <button class="btn tiny" id="stage-prev">◀</button>
+        <div class="stageinfo">
+          <div id="stage-label">SECTOR 1</div>
+          <div class="dim tiny" id="stage-best">best 1</div>
+        </div>
+        <button class="btn tiny" id="stage-next">▶</button>
+        <button class="btn fight" id="fight-btn">DEPLOY</button>
+      </div>
+
+      <div id="boss-banner" class="boss-banner hidden">
+        <span>SIGNATURE DETECTED</span>
+        <button class="btn boss" id="boss-btn">BOSS BATTLE</button>
+      </div>
+
+      <div class="canvas-wrap">
+        <canvas id="battle-canvas"></canvas>
+        <div id="canvas-overlay" class="canvas-overlay hidden">
+          <div class="overlay-title" id="ov-title">VICTORY</div>
+          <div class="overlay-sub" id="ov-sub"></div>
+        </div>
+        <div id="battle-hud" class="battle-hud">
+          <div class="hudline">
+            <span id="bf-mode">AUTO BATTLE</span>
+            <span id="bf-timer">0.0s</span>
+          </div>
+        </div>
+        <button id="detonate-btn" class="detonate hidden">DETONATE</button>
+      </div>
+
+      <div class="ctrlrow">
+        <button class="btn ctrl" id="manual-btn">MANUAL HERO</button>
+        <button class="btn ctrl" id="speed-btn">1×</button>
+        <button class="btn ctrl" id="auto-btn">AUTO OFF</button>
+      </div>
+
+      <div class="mobilepad hidden" id="mobilepad">
+        <div class="dpad">
+          <button data-dir="up">▲</button>
+          <div class="midrow">
+            <button data-dir="left">◀</button>
+            <button data-dir="block">B</button>
+            <button data-dir="right">▶</button>
+          </div>
+          <button data-dir="down">▼</button>
+        </div>
+        <button class="abtn" data-dir="attack">A</button>
+      </div>
+
+      <div class="sect-head"><h2>COMBAT LOG</h2></div>
+      <div id="battle-log" class="logpanel"></div>
+      <div class="footpad"></div>
+    </section>
+
+    <!-- ============ SKILLS ============ -->
+    <section id="screen-skills" class="screen">
+      <div class="trophy-head">
+        <div class="troph-big">★ <span id="sk-trophies">0</span></div>
+        <div class="dim tiny">Earned from bosses. Cannot be bought with credits.</div>
+      </div>
+
+      <div class="skill-card autobattle" id="autobattle-card">
+        <div>
+          <div class="skill-name">AUTO BATTLE</div>
+          <div class="skill-desc">Battles start themselves, forever. Costs 100 ★.</div>
+        </div>
+        <button class="btn gold" id="autobattle-btn">100 ★</button>
+      </div>
+
+      <div id="skill-tree" class="skill-tree"></div>
+      <div class="sect-head"><h2>OPTIONS</h2></div>
+      <div class="optrow">
+        <button class="btn ctrl" id="save-btn">SAVE NOW</button>
+        <button class="btn ctrl danger" id="reset-btn">WIPE SAVE</button>
+      </div>
+      <div class="dim tiny" style="padding:8px 4px 0">Save is automatic every 5s and on every action.</div>
+      <div class="footpad"></div>
+    </section>
+  </main>
+
+  <nav id="tabs">
+    <button class="tab active" data-screen="hangar"><span>⚙</span>HANGAR</button>
+    <button class="tab" data-screen="battle"><span>⚔</span>BATTLE<b id="tab-dot" class="dot hidden"></b></button>
+    <button class="tab" data-screen="skills"><span>★</span>SKILLS</button>
+  </nav>
+</div>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
