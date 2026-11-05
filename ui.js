@@ -1337,7 +1337,7 @@ class UI {
     ctx.save();
     ctx.globalAlpha = 0.4;
     ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(bo.x, bo.y + 8, bo.r * 1.05, bo.r * 0.34, 0, 0, 6.283); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bo.x, bo.y + bo.r * 0.55 + 4, bo.r * 0.8, bo.r * 0.26, 0, 0, 6.283); ctx.fill();
     ctx.restore();
     drawMech(ctx, bo.x, bo.y + bo.r * 0.55, bs, ENEMY_PAL, {
       kind: bo.major ? 'enemyE' : 'enemy', anim: bo.anim, walking: false, dir: -1, flash: 0,
@@ -1345,7 +1345,7 @@ class UI {
     bo._hx = offX + bo.x * sc;
     bo._hy = offY + (bo.y - bo.r * 0.4) * sc;
     bo._hr = Math.max(44, bo.r * sc * 1.1);
-    drawStatus(ctx, bo.x, bo.y + bo.r * 0.55, bs * 0.75, bo);
+    drawStatus(ctx, bo.x, bo.y + bo.r * 0.55, bs * 0.95, bo);
     if (bo.enraged) {
       ctx.strokeStyle = 'rgba(255,90,60,' + (0.4 + 0.3 * Math.sin(performance.now() / 100)) + ')';
       ctx.lineWidth = 3;
