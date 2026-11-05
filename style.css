@@ -327,7 +327,18 @@ body{
 .ic-name{font:800 11px/1.2 'Segoe UI',sans-serif;letter-spacing:.6px;color:#dfe8f8}
 .ic-count{color:var(--cyan);font-size:10px;margin-left:6px}
 .ic-desc{font-size:9.5px;color:#7c88a8;margin-top:2px;line-height:1.35}
-.item-card .ic-buy{flex:0 0 auto;padding:7px 9px;font-size:10px}
+.ic-btns{display:flex;flex-direction:column;gap:4px;flex:0 0 auto}
+.item-card .ic-buy,.item-card .ic-up{padding:6px 8px;font-size:9.5px;min-width:66px}
+.ic-lv{color:var(--gold);font-size:9px;margin-left:5px;letter-spacing:.5px}
+
+/* ---------- active buffs ---------- */
+.buffbar{display:flex;gap:6px;padding:4px 12px;background:#0b0f1c;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.buffchip{
+  font:700 9px/1 'Segoe UI',sans-serif;letter-spacing:.9px;padding:4px 8px;border-radius:10px;border:1px solid;
+}
+.buffchip.xp{color:#4fd1ff;border-color:#1f6a86;background:#4fd1ff14}
+.buffchip.atk{color:#ff9a52;border-color:#7a3f1d;background:#ff9a5214}
+.buffchip i{font-style:normal;opacity:.7;margin-left:5px;font-variant-numeric:tabular-nums}
 
 /* ---------- in-battle item bar ---------- */
 .itembar{display:flex;gap:6px;margin-bottom:8px;align-items:stretch}
@@ -338,7 +349,7 @@ body{
 .ib-hint.hot{color:var(--cyan)}
 .itembar{flex-wrap:wrap}
 .item-btn{
-  flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
+  flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;
   padding:8px 4px;border-radius:6px;cursor:pointer;
   background:linear-gradient(180deg,#151b2e,#0e1220);
   border:1px solid #2a3350;color:#9fb0d0;
@@ -363,6 +374,9 @@ body{
   background:#2b3b5f;color:#fff;border-color:var(--cyan);box-shadow:0 0 10px #4fd1ff44;
 }
 
+@media (max-width:430px){
+  .item-btn .iname{display:none}
+}
 @media (max-width:520px){
   .canvas-wrap{aspect-ratio:5/4;max-height:44vh}
   .detonate{padding:7px 10px;font-size:9px;opacity:.92}

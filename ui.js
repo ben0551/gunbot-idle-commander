@@ -462,17 +462,17 @@ class UI {
     const rect = this.canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (this.cw / rect.width);
     const y = (e.clientY - rect.top) * (this.ch / rect.height);
-    const pool = b.mode === 'boss'
-      ? [b.boss].concat(b.minions || [])
-      : b.units.filter(u => u.side === 'e');
+    const pool = this.armedItem ? this.itemPool(this.armedItem)
+      : (b.mode === 'boss' ? [b.boss].concat(b.minions || []) : b.units.filter(u => u.side === 'e'));
     let best = null, bd = 1e9;
     for (const t of pool) {
       if (!t || t.dead || t._hx === undefined) continue;
       const d = Math.hypot(t._hx - x, t._hy - y);
       if (d < bd) { bd = d; best = t; }
     }
+    const def = this.armedItem ? ITEM_BY_ID[this.armedItem] : null;
     if (!best || bd > 80) {
-      if (this.armedItem) this.toast('No target there — tap directly on a hostile mech.');
+      if (def) this.toast('No target there — tap directly on ' + (def.target === 'ally' ? 'one of your units.' : 'a hostile mech.'));
       return;
     }
     if (!this.armedItem) { this.toast('Pick an item first (❄ 🔥 🌀 above the battlefield).'); return; }
@@ -514,7 +514,8 @@ class UI {
     this.cards = {};
     const ti = this.game.state.tierIndex;
     const list = UNITS.slice().sort((a, b) => {
-      const la = a.tier > ti ? 1 : 0, lb = b.tier > ti ? 1 : 0;
+      const la = this.game.unitUnlocked(a.id) ? 0 : 1;
+      const lb = this.game.unitUnlocked(b.id) ? 0 : 1;
       if (la !== lb) return la - lb;
       return a.tier - b.tier || a.cost - b.cost;
     });
@@ -609,7 +610,7 @@ class UI {
       const refs = this.cards[u.id];
       if (!refs) return;
       const st = s.units[u.id];
-      const unlocked = u.tier <= ti;
+      const unlocked = g.unitUnlocked(u.id);
       refs.el.classList.toggle('locked', !unlocked);
       if (!unlocked) {
         const need = TIERS[u.tier];
@@ -664,16 +665,26 @@ class UI {
       row.innerHTML =
         '<div class="ic-icon" style="color:' + it.color + ';border-color:' + it.color + '55;background:' + it.color + '12">' + it.icon + '</div>' +
         '<div class="ic-body">' +
-          '<div class="ic-name">' + it.name + '<span class="ic-count"></span></div>' +
-          '<div class="ic-desc">' + it.desc + '</div>' +
+          '<div class="ic-name">' + it.name + '<span class="ic-count"></span><span class="ic-lv"></span></div>' +
+          '<div class="ic-desc"></div>' +
         '</div>' +
-        '<button class="btn cyan ic-buy">' + fmt(it.cost) + '</button>';
+        '<div class="ic-btns">' +
+          '<button class="btn cyan ic-buy">' + fmt(it.cost) + '</button>' +
+          (it.upCost ? '<button class="btn gold ic-up">MK</button>' : '') +
+        '</div>';
       wrap.appendChild(row);
       const btn = row.querySelector('.ic-buy');
       btn.addEventListener('click', () => {
         if (!this.game.buyItem(it.id)) this.toast('Not enough credits for ' + it.name + '.');
       });
-      this.shopRefs[it.id] = { row, btn, count: row.querySelector('.ic-count') };
+      const up = row.querySelector('.ic-up');
+      if (up) up.addEventListener('click', () => {
+        if (!this.game.upgradeItem(it.id)) this.toast('Not enough credits, or already maxed.');
+      });
+      this.shopRefs[it.id] = {
+        row, btn, up, count: row.querySelector('.ic-count'),
+        desc: row.querySelector('.ic-desc'), lv: row.querySelector('.ic-lv'),
+      };
     });
   }
 
@@ -686,6 +697,18 @@ class UI {
       ref.count.textContent = have ? '×' + have : '';
       ref.btn.textContent = fmt(it.cost) + ' ₡';
       ref.btn.disabled = s.money < it.cost;
+      if (it.upCost) {
+        const lv = this.game.state.itemLevels[it.id] || 1;
+        const maxed = lv >= it.maxLevel;
+        ref.lv.textContent = ' MK' + lv;
+        ref.desc.textContent = maxed
+          ? 'Stuns up to ' + it.maxTargets + ' in a cluster for ' + this.game.itemDuration(it.id).toFixed(1) + 's. MAXED.'
+          : 'Stuns up to ' + it.maxTargets + ' in a cluster for ' + this.game.itemDuration(it.id).toFixed(1) + 's. Upgradeable.';
+        ref.up.textContent = maxed ? 'MAX' : 'MK' + (lv + 1) + ' · ' + fmt(this.game.itemUpgradeCost(it.id));
+        ref.up.disabled = maxed || s.money < this.game.itemUpgradeCost(it.id);
+      } else {
+        ref.desc.textContent = it.desc;
+      }
     });
   }
 
@@ -704,6 +727,20 @@ class UI {
       bar.appendChild(btn);
       this.itemRefs[it.id] = btn;
     });
+  }
+
+  itemPool(id) {
+    const b = this.game.battle;
+    if (!b) return [];
+    const def = ITEM_BY_ID[id];
+    if (def && def.target === 'ally') {
+      return b.mode === 'boss'
+        ? [b.hero].concat(b.allies || []).filter(t => t && !t.dead)
+        : b.units.filter(u => u.side === 'p' && !u.dead);
+    }
+    return b.mode === 'boss'
+      ? [b.boss].concat(b.minions || []).filter(t => t && !t.dead)
+      : b.units.filter(u => u.side === 'e' && !u.dead);
   }
 
   armItem(id) {
@@ -733,11 +770,12 @@ class UI {
       btn.disabled = !live;
     });
     const hint = document.getElementById('ib-hint');
+    const armedDef = this.armedItem ? ITEM_BY_ID[this.armedItem] : null;
     hint.textContent = !live
       ? 'NO ACTIVE ENGAGEMENT'
-      : this.armedItem
-        ? 'TAP A HOSTILE TO DEPLOY ' + ITEM_BY_ID[this.armedItem].name.toUpperCase()
-        : 'TAP AN ITEM, THEN TAP AN ENEMY';
+      : armedDef
+        ? 'TAP ' + (armedDef.target === 'ally' ? 'ONE OF YOUR UNITS' : 'A HOSTILE') + ' TO DEPLOY ' + armedDef.name.toUpperCase()
+        : 'TAP AN ITEM, THEN TAP A TARGET';
     hint.classList.toggle('hot', !!this.armedItem && live);
   }
 
@@ -817,6 +855,21 @@ class UI {
     this.renderLog();
   }
 
+  refreshBuffs() {
+    const bar = document.getElementById('buffbar');
+    const b = this.game.state.buffs || {};
+    const mm = t => {
+      const s = Math.max(0, Math.ceil(t));
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    };
+    const chips = [];
+    if (b.xp > 0) chips.push('<span class="buffchip xp">▲ XP +50% <i>' + mm(b.xp) + '</i></span>');
+    if (b.atk > 0) chips.push('<span class="buffchip atk">⚔ DMG +50% <i>' + mm(b.atk) + '</i></span>');
+    if (!chips.length) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+    bar.classList.remove('hidden');
+    bar.innerHTML = chips.join('');
+  }
+
   refreshHud() {
     const g = this.game, s = g.state;
     document.getElementById('hud-money').textContent = fmt(s.money);
@@ -832,6 +885,7 @@ class UI {
     document.getElementById('hud-xptext').textContent = fmt(into) + ' / ' + fmt(nxt - cur) + ' XP';
     const dot = document.getElementById('tab-dot');
     dot.classList.toggle('hidden', !s.pendingBoss);
+    this.refreshBuffs();
   }
 
   refreshStage() {
@@ -871,6 +925,7 @@ class UI {
   }
 
   startFront() {
+    this.game.state.lastDrops = [];
     this.game.state.stage = clamp(this.game.state.stage, 1, this.game.state.battleNumber);
     this.game.startBattle();
     this.scenery = this.makeScenery();
@@ -882,6 +937,7 @@ class UI {
   }
 
   startBoss() {
+    this.game.state.lastDrops = [];
     this.game.startBoss();
     this.battleHandled = false;
     document.getElementById('canvas-overlay').classList.add('hidden');
@@ -995,6 +1051,10 @@ class UI {
         msg = b.kind === 'major' ? 'Major boss destroyed. Trophies secured.' : 'Mini-boss destroyed. Trophies secured.';
       } else {
         msg = 'Sector ' + b.stage + ' cleared.' + (this.game.state.pendingBoss ? '  ⚠ BOSS SIGNATURE DETECTED' : '');
+      }
+      if (b.mode === 'boss') {
+        const drops = this.game.state.lastDrops || [];
+        if (drops.length) msg += '\n\n' + drops.map(d => d.icon + '  ' + d.label).join('\n');
       }
     } else {
       msg = b.mode === 'boss'
@@ -1316,6 +1376,9 @@ class UI {
       if (a.dead) continue;
       drawMech(ctx, a.x, a.y, 0.8, palFor(a.tier, 'p'), { kind: a.id, anim: a.anim, walking: false, dir: b.boss.y > a.y ? 1 : -1, flash: a.flash });
       drawBar(ctx, a.x - 16, a.y - 56, 32, 4, a.hp / a.maxHp, '#4be08a');
+      a._hx = offX + a.x * sc;
+      a._hy = offY + (a.y - 30) * sc;
+      a._hr = 30;
     }
 
     // escort minions
@@ -1362,6 +1425,9 @@ class UI {
       ctx.restore();
       drawMech(ctx, h.x, h.y, 1.3, { body: '#cdd9ee', trim: '#6fb6ff', glow: '#bfe9ff' },
         { kind: 'hero', anim: h.anim, walking: false, dir: h.facing, flash: h.flash, hero: true });
+      h._hx = offX + h.x * sc;
+      h._hy = offY + (h.y - 46) * sc;
+      h._hr = 46;
       if (h.blocking) {
         ctx.strokeStyle = 'rgba(79,209,255,0.85)';
         ctx.lineWidth = 2.5;

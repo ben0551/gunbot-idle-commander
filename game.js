@@ -55,12 +55,17 @@ const SKILL_BY_ID = {};
 SKILLS.forEach(s => { SKILL_BY_ID[s.id] = s; });
 
 const ITEMS = [
-  { id:'freeze',   name:'Cryo Grenade', cost:400, dur:4.5, color:'#7fe3ff', icon:'❄',
+  { id:'freeze',   name:'Cryo Grenade',  cost:400, dur:4.5, target:'enemy', color:'#7fe3ff', icon:'❄',
     desc:'Freezes a target solid — no movement, no attacks.' },
-  { id:'fire',     name:'Incendiary',   cost:320, dur:6,   color:'#ff9a52', icon:'🔥',
+  { id:'fire',     name:'Incendiary',    cost:320, dur:6,   target:'enemy', color:'#ff9a52', icon:'✹',
     desc:'Sets a target burning — 5% max HP per second.' },
-  { id:'insanity', name:'Cortex Spike', cost:900, dur:6,   color:'#c07bff', icon:'🌀',
+  { id:'insanity', name:'Cortex Spike',  cost:900, dur:6,   target:'enemy', color:'#c07bff', icon:'◉',
     desc:'Mind-hacks a target — it attacks its own side.' },
+  { id:'net',      name:'Paralysis Net', cost:600, dur:3,   target:'enemy', color:'#8fe3b0', icon:'▣',
+    upCost:700, baseDur:3, durPerLevel:1.2, maxLevel:5, splash:140, maxTargets:3,
+    desc:'Stuns up to 3 clustered enemies. Duration upgrades with credits.' },
+  { id:'heal',     name:'Repair Kit',    cost:300, dur:0,   target:'ally',  color:'#7bffb6', icon:'✚',
+    healPct:0.45, desc:'Restores 45% HP to one of your own units.' },
 ];
 const ITEM_BY_ID = {};
 ITEMS.forEach(i => { ITEM_BY_ID[i.id] = i; });
@@ -134,7 +139,11 @@ class Game {
       speed: 1,
       lastTick: Date.now(),
       seenTiers: 1,
-      items: { freeze: 0, fire: 0, insanity: 0 },
+      items: { freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 },
+      itemLevels: { net: 1 },
+      buffs: { xp: 0, atk: 0 },
+      blueprints: {},
+      lastDrops: [],
     };
     UNITS.forEach(u => { this.state.units[u.id] = { count: 0, level: 1 }; });
     this.battle = null;
@@ -157,14 +166,18 @@ class Game {
         battleNumber: 1, stage: 1, tierIndex: 0, units: {}, heroLevel: 1,
         skills: {}, autoBattle: false, autoBattleOwned: false, pendingBoss: null,
         bossesKilled: 0, speed: 1, lastTick: Date.now(), seenTiers: 1,
-        items: { freeze: 0, fire: 0, insanity: 0 },
+        items: { freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 },
+        itemLevels: { net: 1 }, buffs: { xp: 0, atk: 0 }, blueprints: {}, lastDrops: [],
       };
       this.state = Object.assign(base, s);
       this.state.speed = 1;
       UNITS.forEach(u => {
         if (!this.state.units[u.id]) this.state.units[u.id] = { count: 0, level: 1 };
       });
-      this.state.items = Object.assign({ freeze: 0, fire: 0, insanity: 0 }, s.items || {});
+      this.state.items = Object.assign({ freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 }, s.items || {});
+      this.state.itemLevels = Object.assign({ net: 1 }, s.itemLevels || {});
+      this.state.buffs = Object.assign({ xp: 0, atk: 0 }, s.buffs || {});
+      this.state.blueprints = s.blueprints || {};
       // offline income
       const elapsed = clamp((Date.now() - (s.lastTick || Date.now())) / 1000, 0, 8 * 3600);
       const gain = this.idlePerSec() * elapsed * 0.6;
@@ -185,6 +198,22 @@ class Game {
 
   /* ---------- derived ---------- */
   skill(id) { return this.state.skills[id] || 0; }
+  atkBuff() { return (this.state.buffs && this.state.buffs.atk > 0) ? 1.5 : 1; }
+  xpBuff() { return (this.state.buffs && this.state.buffs.xp > 0) ? 1.5 : 1; }
+  itemDuration(id) {
+    const d = ITEM_BY_ID[id];
+    if (!d) return 0;
+    if (!d.upCost) return d.dur;
+    const lv = this.state.itemLevels[id] || 1;
+    return d.baseDur + (lv - 1) * d.durPerLevel;
+  }
+  itemUpgradeCost(id) {
+    const d = ITEM_BY_ID[id];
+    if (!d || !d.upCost) return 0;
+    const lv = this.state.itemLevels[id] || 1;
+    if (lv >= d.maxLevel) return 0;
+    return Math.floor(d.upCost * Math.pow(2, lv - 1));
+  }
 
   tier() { return TIERS[this.state.tierIndex]; }
   nextTier() {
@@ -222,7 +251,7 @@ class Game {
     const tb = this.tierBonus();
     return {
       hp: u.base.hp * lm * tb * (1 + 0.15 * this.skill('com3')),
-      atk: u.base.atk * lm * tb * (1 + 0.12 * this.skill('com1')),
+      atk: u.base.atk * lm * tb * (1 + 0.12 * this.skill('com1')) * this.atkBuff(),
       def: u.base.def * lm * tb,
       spd: u.base.spd,
       range: u.base.range,
@@ -236,7 +265,7 @@ class Game {
     const tb = this.tierBonus();
     return {
       hp: 300 * lm * tb * (1 + 0.15 * this.skill('her2')),
-      atk: 26 * lm * tb * (1 + 0.15 * this.skill('her1')),
+      atk: 26 * lm * tb * (1 + 0.15 * this.skill('her1')) * this.atkBuff(),
       def: 10 * lm * tb,
       spd: 60,
       range: 62,
@@ -260,7 +289,9 @@ class Game {
     return Math.floor(u.cost * 1.6 * Math.pow(1.17, lv - 1) * (1 - 0.05 * this.skill('tec1')));
   }
 
-  unitUnlocked(id) { return UNIT_BY_ID[id].tier <= this.state.tierIndex; }
+  unitUnlocked(id) {
+    return UNIT_BY_ID[id].tier <= this.state.tierIndex || !!(this.state.blueprints && this.state.blueprints[id]);
+  }
   totalOwned() {
     return UNITS.reduce((a, u) => a + this.state.units[u.id].count, 0);
   }
@@ -327,6 +358,20 @@ class Game {
     this.state.money -= def.cost;
     this.state.items[id] = (this.state.items[id] || 0) + 1;
     this.log('Bought ' + def.name + ' (×' + this.state.items[id] + ').', 'good');
+    this.emit();
+    return true;
+  }
+
+  upgradeItem(id) {
+    const def = ITEM_BY_ID[id];
+    if (!def || !def.upCost) return false;
+    const lv = this.state.itemLevels[id] || 1;
+    if (lv >= def.maxLevel) return false;
+    const c = this.itemUpgradeCost(id);
+    if (this.state.money < c) return false;
+    this.state.money -= c;
+    this.state.itemLevels[id] = lv + 1;
+    this.log(def.name + ' upgraded to Mk' + (lv + 1) + ' — stun lasts ' + this.itemDuration(id).toFixed(1) + 's.', 'tier');
     this.emit();
     return true;
   }
@@ -402,7 +447,7 @@ class Game {
     const xpMul = (1 + 0.18 * this.skill('tec2')) * (isBoss ? (kind === 'major' ? 8 : 4) : 1);
     return {
       money: Math.floor(30 * Math.pow(1.13, stage - 1) * moneyMul),
-      xp: Math.floor(11 * Math.pow(1.16, stage - 1) * xpMul),
+      xp: Math.floor(11 * Math.pow(1.16, stage - 1) * xpMul * this.xpBuff()),
     };
   }
 
@@ -420,6 +465,8 @@ class Game {
         this.state.wins += result.kind === 'major' ? 3 : 1;
         this.checkLevelUp();
         this.log('Boss down! +' + troph + ' trophies, +' + fmt(r.money) + ' credits, +' + fmt(r.xp) + ' XP.', 'good');
+        this.state.lastDrops = this.rollBossLoot(result.kind, result.stage);
+        this.state.lastDrops.forEach(d => this.log('Loot: ' + d.label, 'tier'));
         this.afterWinBoss();
       } else {
         this.log('Boss repelled your assault. Regroup and try again.', 'bad');
@@ -453,10 +500,64 @@ class Game {
   }
   afterWinBoss() { /* hook for ui */ }
 
+  /* next chassis that a blueprint could unlock (a tier or two ahead) */
+  nextBlueprintTarget() {
+    const pool = UNITS.filter(u =>
+      !this.unitUnlocked(u.id) && u.tier <= this.state.tierIndex + 2);
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  rollBossLoot(kind, stage) {
+    const major = kind === 'major';
+    const rolls = major ? 3 : 1;
+    const base = this.battleRewards(stage, true, kind);
+    const table = [
+      ['credits', major ? 26 : 34],
+      ['xp', major ? 22 : 26],
+      ['atk', major ? 20 : 24],
+      ['item', major ? 20 : 14],
+      ['blueprint', major ? 12 : 2],
+    ];
+    const total = table.reduce((a, t) => a + t[1], 0);
+    const drops = [];
+    for (let i = 0; i < rolls; i++) {
+      let r = Math.random() * total, pick = 'credits';
+      for (const [id, w] of table) { if (r < w) { pick = id; break; } r -= w; }
+      if (pick === 'blueprint' && !this.nextBlueprintTarget()) pick = 'item';
+
+      if (pick === 'credits') {
+        const amt = Math.floor(base.money * (0.8 + Math.random() * 1.4));
+        this.state.money += amt;
+        drops.push({ icon: '₡', label: 'Credit cache +' + fmt(amt), color: '#ffc44d' });
+      } else if (pick === 'xp') {
+        this.state.buffs.xp = Math.min(1200, this.state.buffs.xp) + 180;
+        drops.push({ icon: '▲', label: 'XP boost +50% (3 min)', color: '#4fd1ff' });
+      } else if (pick === 'atk') {
+        this.state.buffs.atk = Math.min(1200, this.state.buffs.atk) + 180;
+        drops.push({ icon: '⚔', label: 'Weapons overclock +50% damage (3 min)', color: '#ff8a5c' });
+      } else if (pick === 'item') {
+        const it = ITEMS[Math.floor(Math.random() * ITEMS.length)];
+        this.state.items[it.id] = (this.state.items[it.id] || 0) + 1;
+        drops.push({ icon: it.icon, label: it.name + ' ×1', color: it.color });
+      } else {
+        const u = this.nextBlueprintTarget();
+        this.state.blueprints[u.id] = true;
+        drops.push({ icon: '◈', label: 'BLUEPRINT — ' + u.name + ' unlocked early', color: '#c07bff' });
+      }
+    }
+    return drops;
+  }
+
   /* ---------- idle loop ---------- */
   tick(dt) {
     const gain = this.idlePerSec() * dt;
     this.state.money += gain;
+    const b = this.state.buffs;
+    if (b) {
+      b.xp = Math.max(0, b.xp - dt);
+      b.atk = Math.max(0, b.atk - dt);
+    }
     return gain;
   }
 }
@@ -698,12 +799,34 @@ class FrontBattle {
   }
   applyItem(id, target) {
     if (!target || target.dead) return false;
-    const dur = ITEM_BY_ID[id].dur;
+    const def = ITEM_BY_ID[id];
+    if (!def) return false;
+
+    if (id === 'heal') {
+      if (target.side !== 'p') return false;
+      target.hp = Math.min(target.maxHp, target.hp + target.maxHp * def.healPct);
+      this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 8, max: 120, t: 0, life: 0.55, color: def.color });
+      return true;
+    }
+
+    if (target.side !== 'e') return false;
+
+    if (id === 'net') {
+      const dur = this.game.itemDuration('net');
+      this.alive('e')
+        .filter(e => Math.abs(e.x - target.x) < (def.splash || 140))
+        .slice(0, def.maxTargets || 3)
+        .forEach(e => { e.freeze = Math.max(e.freeze || 0, dur); });
+      this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 10, max: def.splash || 140, t: 0, life: 0.6, color: def.color });
+      return true;
+    }
+
+    const dur = this.game.itemDuration(id);
     if (id === 'freeze') target.freeze = dur;
     else if (id === 'fire') target.burn = dur;
     else if (id === 'insanity') target.insane = dur;
     else return false;
-    this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 8, max: 140, t: 0, life: 0.55, color: ITEM_BY_ID[id].color });
+    this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 8, max: 140, t: 0, life: 0.55, color: def.color });
     return true;
   }
 
@@ -1046,12 +1169,34 @@ class BossBattle {
   }
   applyItem(id, target) {
     if (!target || target.dead) return false;
-    const dur = ITEM_BY_ID[id].dur;
+    const def = ITEM_BY_ID[id];
+    if (!def) return false;
+
+    if (id === 'heal') {
+      const isAlly = target === this.hero || this.allies.indexOf(target) >= 0;
+      if (!isAlly) return false;
+      target.hp = Math.min(target.maxHp, target.hp + target.maxHp * def.healPct);
+      this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 10, max: 110, t: 0, life: 0.55, color: def.color });
+      return true;
+    }
+
+    if (id === 'net') {
+      const dur = this.game.itemDuration('net');
+      const pool = [this.boss].concat(this.minions || [])
+        .filter(t => t && !t.dead && Math.hypot(t.x - target.x, t.y - target.y) < (def.splash || 140))
+        .slice(0, def.maxTargets || 3);
+      if (!pool.length) return false;
+      pool.forEach(t => { t.freeze = Math.max(t.freeze || 0, dur); });
+      this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 12, max: def.splash || 140, t: 0, life: 0.6, color: def.color });
+      return true;
+    }
+
+    const dur = this.game.itemDuration(id);
     if (id === 'freeze') target.freeze = dur;
     else if (id === 'fire') target.burn = dur;
     else if (id === 'insanity') target.insane = dur;
     else return false;
-    this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 10, max: 120, t: 0, life: 0.55, color: ITEM_BY_ID[id].color });
+    this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 10, max: 120, t: 0, life: 0.55, color: def.color });
     return true;
   }
 
