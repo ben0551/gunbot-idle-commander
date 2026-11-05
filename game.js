@@ -54,6 +54,17 @@ const SKILLS = [
 const SKILL_BY_ID = {};
 SKILLS.forEach(s => { SKILL_BY_ID[s.id] = s; });
 
+const ITEMS = [
+  { id:'freeze',   name:'Cryo Grenade', cost:400, dur:4.5, color:'#7fe3ff', icon:'❄',
+    desc:'Freezes a target solid — no movement, no attacks.' },
+  { id:'fire',     name:'Incendiary',   cost:320, dur:6,   color:'#ff9a52', icon:'🔥',
+    desc:'Sets a target burning — 5% max HP per second.' },
+  { id:'insanity', name:'Cortex Spike', cost:900, dur:6,   color:'#c07bff', icon:'🌀',
+    desc:'Mind-hacks a target — it attacks its own side.' },
+];
+const ITEM_BY_ID = {};
+ITEMS.forEach(i => { ITEM_BY_ID[i.id] = i; });
+
 const SAVE_KEY = 'gunbot-idle-v1';
 const FIELD_CAP = 9;
 const AUTOBATTLE_COST = 100;
@@ -123,6 +134,7 @@ class Game {
       speed: 1,
       lastTick: Date.now(),
       seenTiers: 1,
+      items: { freeze: 0, fire: 0, insanity: 0 },
     };
     UNITS.forEach(u => { this.state.units[u.id] = { count: 0, level: 1 }; });
     this.battle = null;
@@ -145,12 +157,14 @@ class Game {
         battleNumber: 1, stage: 1, tierIndex: 0, units: {}, heroLevel: 1,
         skills: {}, autoBattle: false, autoBattleOwned: false, pendingBoss: null,
         bossesKilled: 0, speed: 1, lastTick: Date.now(), seenTiers: 1,
+        items: { freeze: 0, fire: 0, insanity: 0 },
       };
       this.state = Object.assign(base, s);
       this.state.speed = 1;
       UNITS.forEach(u => {
         if (!this.state.units[u.id]) this.state.units[u.id] = { count: 0, level: 1 };
       });
+      this.state.items = Object.assign({ freeze: 0, fire: 0, insanity: 0 }, s.items || {});
       // offline income
       const elapsed = clamp((Date.now() - (s.lastTick || Date.now())) / 1000, 0, 8 * 3600);
       const gain = this.idlePerSec() * elapsed * 0.6;
@@ -307,6 +321,29 @@ class Game {
     this.emit();
     return true;
   }
+  buyItem(id) {
+    const def = ITEM_BY_ID[id];
+    if (!def || this.state.money < def.cost) return false;
+    this.state.money -= def.cost;
+    this.state.items[id] = (this.state.items[id] || 0) + 1;
+    this.log('Bought ' + def.name + ' (×' + this.state.items[id] + ').', 'good');
+    this.emit();
+    return true;
+  }
+
+  tryUseItem(id, target) {
+    const def = ITEM_BY_ID[id];
+    const b = this.battle;
+    if (!def || !b || b.over) return false;
+    if ((this.state.items[id] || 0) <= 0) { this.log('No ' + def.name + ' left — buy more in the hangar.', 'bad'); this.emit(); return false; }
+    if (!b.applyItem(id, target)) return false;
+    this.state.items[id]--;
+    this.log(def.name + ' fired — ' + def.desc.split(' —')[0] + '.', 'good');
+    this.save();
+    this.emit();
+    return true;
+  }
+
   buyAutoBattle() {
     if (this.state.autoBattleOwned) return false;
     if (this.state.trophies < AUTOBATTLE_COST) return false;
@@ -517,11 +554,23 @@ class FrontBattle {
     for (const u of this.units) {
       if (u.dead) continue;
       u.flash = Math.max(0, u.flash - dt * 4);
+      // field-item status effects
+      if (u.burn > 0) {
+        u.burn = Math.max(0, u.burn - dt);
+        u.hp -= u.maxHp * 0.05 * dt;
+        if (u.hp <= 0) { this.killUnit(u); continue; }
+      }
+      if (u.insane > 0) u.insane = Math.max(0, u.insane - dt);
+      if (u.freeze > 0) {
+        u.freeze = Math.max(0, u.freeze - dt);
+        continue;                        // frozen solid: no move, no attack
+      }
       if (u.role === 'income') continue;
       u.cd -= dt;
       if (u.role === 'suicide' && !u.manualTriggered) continue;
 
-      const foes = this.alive(u.side === 'p' ? 'e' : 'p');
+      const turned = u.insane > 0;
+      const foes = this.alive(turned ? u.side : (u.side === 'p' ? 'e' : 'p')).filter(f => f !== u);
       if (!foes.length) continue;
 
       // hero manual control
@@ -641,6 +690,23 @@ class FrontBattle {
     }
   }
 
+  killUnit(u) {
+    if (u.dead) return;
+    u.hp = 0; u.dead = true;
+    this.fx.push({ type: 'boom', x: u.x, lane: u.lane, t: 0, life: 0.5 });
+    if (u.isHero) this.game.log('Your hero has been destroyed.', 'bad');
+  }
+  applyItem(id, target) {
+    if (!target || target.dead) return false;
+    const dur = ITEM_BY_ID[id].dur;
+    if (id === 'freeze') target.freeze = dur;
+    else if (id === 'fire') target.burn = dur;
+    else if (id === 'insanity') target.insane = dur;
+    else return false;
+    this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 8, max: 140, t: 0, life: 0.55, color: ITEM_BY_ID[id].color });
+    return true;
+  }
+
   nearest(u, foes) {
     let best = null, bd = 1e9;
     for (const f of foes) {
@@ -748,7 +814,7 @@ class BossBattle {
       atk: st.hp * (major ? 0.038 : 0.030),
       name: major ? 'SIEG-LORD ' + (1 + g.state.bossesKilled) : 'SCOUT TITAN ' + (1 + g.state.bossesKilled),
       major, timer: 2.2, slamTimer: 7.5, phase: 0, enraged: false, flash: 0, anim: 0,
-      volleyCount: 0,
+      volleyCount: 0, freeze: 0, burn: 0, insane: 0,
     };
     this.boss.maxHp = this.boss.hp;
     this.allies = [];
@@ -762,6 +828,20 @@ class BossBattle {
         tier: UNIT_BY_ID[f.id].tier, role: f.stats.role,
       });
     });
+    // escort minions — these are what the field items are aimed at
+    this.minions = [];
+    const nMin = major ? 4 : 2;
+    const mHp = Math.max(140, st.hp * 0.55);
+    for (let i = 0; i < nMin; i++) {
+      this.minions.push({
+        x: 500 + (i - (nMin - 1) / 2) * 165,
+        y: 350 + (i % 2) * 46,
+        r: 17, hp: mHp, maxHp: mHp,
+        atk: Math.max(4, st.hp * 0.012), spd: 115,
+        cd: 1 + Math.random(), dead: false, flash: 0, anim: Math.random() * 6,
+        freeze: 0, burn: 0, insane: 0, atkCd: 0,
+      });
+    }
     this.slams = [];
     const allyDps = this.allies.reduce((a, x) => a + x.atk / 1.5, 0);
     this.boss.hp = Math.max(400, (st.atk / 0.7 + allyDps) * (this.kind === 'major' ? 40 : 20));
@@ -772,6 +852,15 @@ class BossBattle {
     if (this.over) { this.resultTimer += dt; return; }
     this.time += dt;
     const b = this.boss, h = this.hero, inp = this.input;
+
+    // status effects on the boss
+    const bossFrozen = b.freeze > 0;
+    if (bossFrozen) b.freeze = Math.max(0, b.freeze - dt);
+    if (b.burn > 0) {
+      b.burn = Math.max(0, b.burn - dt);
+      this.damageBoss(b.maxHp * 0.05 * dt, true);
+    }
+    if (b.insane > 0) b.insane = Math.max(0, b.insane - dt);
 
     // timing: enrage
     if (!b.enraged && b.hp < b.maxHp * 0.4) { b.enraged = true; b.slamTimer = 2.5; }
@@ -800,6 +889,12 @@ class BossBattle {
         type: 'slash', x: h.x + (b.x - h.x) * 0.35, y: h.y + (b.y - h.y) * 0.35,
         t: 0, life: heavy ? 0.3 : 0.2,
       });
+      // the swing also clips escorts standing next to you
+      for (const m of this.minions) {
+        if (m.dead || Math.hypot(m.x - h.x, m.y - h.y) > 95) continue;
+        m.hp -= h.atk * 1.3; m.flash = 1;
+        if (m.hp <= 0) this.killMinion(m);
+      }
     }
 
     // allies fire
@@ -816,26 +911,74 @@ class BossBattle {
       }
     }
 
+    // escort minions
+    for (const m of this.minions) {
+      if (m.dead) continue;
+      m.flash = Math.max(0, m.flash - dt * 4);
+      m.anim += dt * 4;
+      if (m.freeze > 0) {
+        m.freeze = Math.max(0, m.freeze - dt);
+        if (m.burn > 0) this.burnMinion(m, dt);
+        continue;
+      }
+      if (m.burn > 0) { m.burn = Math.max(0, m.burn - dt); this.burnMinion(m, dt); }
+      if (m.insane > 0) m.insane = Math.max(0, m.insane - dt);
+      if (m.dead) continue;
+      m.cd -= dt;
+      if (m.insane > 0) {
+        // turned: shoot the boss, or the nearest other escort
+        if (b.hp > 0) {
+          const d = Math.hypot(b.x - m.x, b.y - m.y);
+          if (d > 70) this.moveToward(m, b.x, b.y, dt);
+          else if (m.cd <= 0) {
+            m.cd = 1.1;
+            this.damageBoss(m.atk * 1.6);
+            this.fx.push({ type: 'slash', x: (m.x + b.x) / 2, y: (m.y + b.y) / 2, t: 0, life: 0.2 });
+          }
+        } else {
+          const o = this.minions.find(x => x !== m && !x.dead);
+          if (o) {
+            const d = Math.hypot(o.x - m.x, o.y - m.y);
+            if (d > 34) this.moveToward(m, o.x, o.y, dt);
+            else if (m.cd <= 0) { m.cd = 1.1; o.hp -= m.atk; o.flash = 1; if (o.hp <= 0) this.killMinion(o); }
+          }
+        }
+      } else {
+        const d = Math.hypot(h.x - m.x, h.y - m.y);
+        if (d > 36) this.moveToward(m, h.x, h.y, dt);
+        else if (m.cd <= 0 && h.hp > 0) {
+          m.cd = 1.6;
+          this.damageHero(m.atk);
+          this.fx.push({ type: 'slash', x: m.x, y: m.y - 10, t: 0, life: 0.18 });
+        }
+      }
+    }
+
     // boss volley
-    b.timer -= dt;
+    if (!bossFrozen) b.timer -= dt;
     b.anim += dt;
-    if (b.timer <= 0) {
+    if (b.timer <= 0 && !bossFrozen) {
       b.timer = b.enraged ? 1.5 : (b.major ? 2.2 : 2.8);
       b.volleyCount = (b.volleyCount || 0) + 1;
       const shots = b.major ? (b.enraged ? 5 : 3) : 2;
+      let aimX = h.x, aimY = h.y, atOwn = false;
+      if (b.insane > 0) {
+        const own = this.minions.filter(m => !m.dead);
+        if (own.length) { aimX = own[0].x; aimY = own[0].y; atOwn = true; }
+      }
       for (let i = 0; i < shots; i++) {
-        const ang = Math.atan2(h.y - b.y, h.x - b.x) + (i - (shots - 1) / 2) * 0.28;
+        const ang = Math.atan2(aimY - b.y, aimX - b.x) + (i - (shots - 1) / 2) * 0.28;
         this.projectiles.push({
           x: b.x, y: b.y + b.r * 0.4, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300,
-          dmg: b.atk, t: 0, life: 3.2, hostile: true, r: 8,
+          dmg: b.atk, t: 0, life: 3.2, hostile: true, r: 8, atOwn,
         });
       }
       this.fx.push({ type: 'muzzle', x: b.x, y: b.y + b.r * 0.4, t: 0, life: 0.2 });
     }
 
     // boss slam telegraph
-    b.slamTimer -= dt;
-    if (b.slamTimer <= 0) {
+    if (!bossFrozen) b.slamTimer -= dt;
+    if (b.slamTimer <= 0 && !bossFrozen) {
       b.slamTimer = b.enraged ? 4.5 : 7.5;
       this.slams.push({ x: b.x, y: b.y + 90, r: 200, t: 0, telegraph: 1.0, fired: false, dmg: b.atk * 2.0 });
     }
@@ -857,9 +1000,18 @@ class BossBattle {
       p.t += dt;
       if (p.hostile) {
         p.x += p.vx * dt; p.y += p.vy * dt;
-        if (Math.hypot(p.x - h.x, p.y - h.y) < 22 + p.r) {
+        if (!p.atOwn && Math.hypot(p.x - h.x, p.y - h.y) < 22 + p.r) {
           p.done = true;
           this.damageHero(p.dmg);
+        }
+        if (p.atOwn) {
+          for (const m of this.minions) {
+            if (!m.dead && Math.hypot(p.x - m.x, p.y - m.y) < 18 + p.r) {
+              p.done = true; m.hp -= p.dmg; m.flash = 1;
+              if (m.hp <= 0) this.killMinion(m);
+              break;
+            }
+          }
         }
         for (const a of this.allies) {
           if (!a.dead && Math.hypot(p.x - a.x, p.y - a.y) < 16 + p.r) {
@@ -878,10 +1030,35 @@ class BossBattle {
     else if (this.time > 180) this.finish(false);
   }
 
-  damageBoss(amount) {
+  moveToward(o, tx, ty, dt) {
+    const d = Math.hypot(tx - o.x, ty - o.y) || 1;
+    o.x += (tx - o.x) / d * o.spd * dt;
+    o.y += (ty - o.y) / d * o.spd * dt;
+  }
+  burnMinion(m, dt) {
+    m.hp -= m.maxHp * 0.05 * dt;
+    if (m.hp <= 0) this.killMinion(m);
+  }
+  killMinion(m) {
+    if (m.dead) return;
+    m.dead = true; m.hp = 0;
+    this.fx.push({ type: 'boom', x: m.x, y: m.y - 10, t: 0, life: 0.45 });
+  }
+  applyItem(id, target) {
+    if (!target || target.dead) return false;
+    const dur = ITEM_BY_ID[id].dur;
+    if (id === 'freeze') target.freeze = dur;
+    else if (id === 'fire') target.burn = dur;
+    else if (id === 'insanity') target.insane = dur;
+    else return false;
+    this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 10, max: 120, t: 0, life: 0.55, color: ITEM_BY_ID[id].color });
+    return true;
+  }
+
+  damageBoss(amount, silent) {
     if (this.boss.hp <= 0) return;
     this.boss.hp -= amount;
-    this.boss.flash = 1;
+    if (!silent) this.boss.flash = 1;
     if (this.boss.hp <= 0) {
       this.boss.hp = 0;
       for (let i = 0; i < 10; i++) {

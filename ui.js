@@ -236,6 +236,73 @@ function drawBar(ctx, x, y, w, h, pct, col, bg) {
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
+function drawStatus(ctx, x, y, s, o) {
+  const t = performance.now() / 1000;
+
+  if (o.freeze > 0) {
+    const bw = 48 * s, bh = 70 * s;
+    const bx = x - bw / 2, by = y - bh;
+    ctx.save();
+    // glassy block
+    const g = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+    g.addColorStop(0, 'rgba(150,235,255,0.55)');
+    g.addColorStop(0.5, 'rgba(90,190,235,0.30)');
+    g.addColorStop(1, 'rgba(170,240,255,0.55)');
+    ctx.fillStyle = g;
+    rr(ctx, bx, by, bw, bh, 7 * s);
+    ctx.fill();
+    ctx.strokeStyle = '#bff4ff';
+    ctx.lineWidth = Math.max(1.2, 1.4 * s);
+    ctx.stroke();
+    // frost cracks
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = Math.max(1, 0.9 * s);
+    ctx.beginPath();
+    ctx.moveTo(bx + bw * 0.22, by); ctx.lineTo(bx + bw * 0.52, by + bh * 0.55); ctx.lineTo(bx + bw * 0.3, y);
+    ctx.moveTo(bx + bw * 0.8, by + bh * 0.1); ctx.lineTo(bx + bw * 0.5, by + bh * 0.6); ctx.lineTo(bx + bw * 0.78, by + bh * 0.92);
+    ctx.stroke();
+    // shimmer
+    ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3);
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(bx + bw * 0.15, y); ctx.lineTo(bx + bw * 0.32, by + bh * 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (o.burn > 0) {
+    // warm glow at the base
+    const gr = ctx.createRadialGradient(x, y - 20 * s, 2, x, y - 20 * s, 34 * s);
+    gr.addColorStop(0, 'rgba(255,140,60,0.35)');
+    gr.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(x, y - 20 * s, 34 * s, 0, 6.283); ctx.fill();
+    for (let i = 0; i < 4; i++) {
+      const ph = (t * 1.9 + i * 0.25) % 1;
+      const fx = x + Math.sin(t * 3 + i * 2.1) * 9 * s;
+      const fy = y - 44 * s - ph * 34 * s;
+      ctx.globalAlpha = (1 - ph) * 0.95;
+      ctx.fillStyle = i % 2 ? '#ffd166' : '#ff6a2c';
+      ctx.beginPath(); ctx.arc(fx, fy, (5.2 - ph * 3.2) * s, 0, 6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (o.insane > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,130,255,' + (0.55 + 0.35 * Math.sin(t * 7)) + ')';
+    ctx.lineWidth = Math.max(1.6, 2 * s);
+    ctx.beginPath();
+    ctx.arc(x, y - 34 * s, (27 + Math.sin(t * 4) * 3) * s, 0, 6.283);
+    ctx.stroke();
+    ctx.fillStyle = '#d8a6ff';
+    ctx.font = '900 ' + Math.round(14 * s) + 'px "Segoe UI",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('!', x, y - 62 * s);
+    ctx.restore();
+  }
+}
+
 /* ===========================================================
    UI
    =========================================================== */
@@ -259,13 +326,30 @@ class UI {
     this.heroCv = document.getElementById('hero-portrait');
     this.heroCtx = this.heroCv.getContext('2d');
 
+    this.armedItem = null;
     this.buildGrid();
     this.buildSkills();
+    this.buildShop();
+    this.buildItemBar();
     this.bind();
     this.resize();
     this.refreshAll(true);
     window.addEventListener('resize', () => this.resize());
     if (window.ResizeObserver) new ResizeObserver(() => this.resize()).observe(this.canvas.parentElement);
+
+    this.lastFrameTs = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { this.lastFrameTs = Date.now(); return; }
+      const away = Math.max(0, (Date.now() - this.lastFrameTs) / 1000);
+      if (away > 5) {
+        const gain = this.game.idlePerSec() * Math.min(away, 8 * 3600) * 0.6;
+        this.game.state.money += gain;
+        this.game.log('Away for ' + Math.round(away / 60) + ' min — collected ' + fmt(gain) + ' credits.', 'good');
+        this.renderLog();
+        this.refreshHud();
+      }
+      this.last = performance.now();
+    });
 
     this.last = performance.now();
     requestAnimationFrame(t => this.loop(t));
@@ -323,23 +407,81 @@ class UI {
     // touch / key input
     const setKey = (k, v) => { this.keys[k] = v; };
     window.addEventListener('keydown', e => {
-      if (e.repeat) return;
       const k = e.key.toLowerCase();
-      if (['arrowleft','arrowright','arrowup','arrowdown',' '].includes(k)) e.preventDefault();
+      // must fire on auto-repeat too, otherwise a held arrow scrolls the page
+      if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', ' '].includes(k)) e.preventDefault();
+      if (e.repeat) return;
+      if (k === '1') this.armItem('freeze');
+      if (k === '2') this.armItem('fire');
+      if (k === '3') this.armItem('insanity');
+      if (k === 'escape') { this.armedItem = null; this.refreshItemBar(); }
       setKey(k, true);
     });
     window.addEventListener('keyup', e => setKey(e.key.toLowerCase(), false));
     window.addEventListener('blur', () => { this.keys = {}; });
 
+    // d-pad: pointer capture so a held finger keeps moving the ace even if it
+    // drifts off the button, and no long-press callout / context menu.
     document.querySelectorAll('#mobilepad button').forEach(btn => {
       const dir = btn.dataset.dir;
-      const on = e => { e.preventDefault(); this.keys['pad_' + dir] = true; if (dir === 'attack') this.keys[' '] = true; };
-      const off = e => { e.preventDefault(); this.keys['pad_' + dir] = false; if (dir === 'attack') this.keys[' '] = false; };
-      btn.addEventListener('pointerdown', on);
-      btn.addEventListener('pointerup', off);
-      btn.addEventListener('pointercancel', off);
-      btn.addEventListener('pointerleave', off);
+      const press = e => {
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+        this.keys['pad_' + dir] = true;
+        if (dir === 'attack') this.keys[' '] = true;
+        btn.classList.add('down');
+      };
+      const release = e => {
+        if (e) e.preventDefault();
+        this.keys['pad_' + dir] = false;
+        if (dir === 'attack') this.keys[' '] = false;
+        btn.classList.remove('down');
+        try { btn.releasePointerCapture(e.pointerId); } catch (err) {}
+      };
+      btn.addEventListener('pointerdown', press);
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointercancel', release);
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+      btn.addEventListener('dragstart', e => e.preventDefault());
     });
+    ['mobilepad', 'battle-canvas', 'itembar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('contextmenu', e => e.preventDefault());
+    });
+
+    // tap an enemy on the canvas to deploy the armed item
+    this.canvas.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      this.canvasTap(e);
+    });
+  }
+
+  canvasTap(e) {
+    const b = this.game.battle;
+    if (!b || b.over) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (this.cw / rect.width);
+    const y = (e.clientY - rect.top) * (this.ch / rect.height);
+    const pool = b.mode === 'boss'
+      ? [b.boss].concat(b.minions || [])
+      : b.units.filter(u => u.side === 'e');
+    let best = null, bd = 1e9;
+    for (const t of pool) {
+      if (!t || t.dead || t._hx === undefined) continue;
+      const d = Math.hypot(t._hx - x, t._hy - y);
+      if (d < bd) { bd = d; best = t; }
+    }
+    if (!best || bd > 80) {
+      if (this.armedItem) this.toast('No target there — tap directly on a hostile mech.');
+      return;
+    }
+    if (!this.armedItem) { this.toast('Pick an item first (❄ 🔥 🌀 above the battlefield).'); return; }
+    const id = this.armedItem;
+    if (this.game.tryUseItem(id, best)) {
+      if ((this.game.state.items[id] || 0) <= 0) this.armedItem = null;
+      this.refreshItemBar();
+      this.refreshHangar(false);
+    }
   }
 
   showScreen(name) {
@@ -347,7 +489,7 @@ class UI {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.screen === name));
     if (name === 'skills') this.refreshSkills();
-    if (name === 'hangar') this.refreshHangar(true);
+    if (name === 'hangar') { this.refreshHangar(true); this.refreshShop(); }
   }
 
   toast(msg) {
@@ -511,6 +653,94 @@ class UI {
     ctx.globalAlpha = 1;
   }
 
+  /* ---------- field supplies ---------- */
+  buildShop() {
+    const wrap = document.getElementById('item-shop');
+    wrap.innerHTML = '';
+    this.shopRefs = {};
+    ITEMS.forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'item-card';
+      row.innerHTML =
+        '<div class="ic-icon" style="color:' + it.color + ';border-color:' + it.color + '55;background:' + it.color + '12">' + it.icon + '</div>' +
+        '<div class="ic-body">' +
+          '<div class="ic-name">' + it.name + '<span class="ic-count"></span></div>' +
+          '<div class="ic-desc">' + it.desc + '</div>' +
+        '</div>' +
+        '<button class="btn cyan ic-buy">' + fmt(it.cost) + '</button>';
+      wrap.appendChild(row);
+      const btn = row.querySelector('.ic-buy');
+      btn.addEventListener('click', () => {
+        if (!this.game.buyItem(it.id)) this.toast('Not enough credits for ' + it.name + '.');
+      });
+      this.shopRefs[it.id] = { row, btn, count: row.querySelector('.ic-count') };
+    });
+  }
+
+  refreshShop() {
+    if (!this.shopRefs) return;
+    const s = this.game.state;
+    ITEMS.forEach(it => {
+      const ref = this.shopRefs[it.id];
+      const have = s.items[it.id] || 0;
+      ref.count.textContent = have ? '×' + have : '';
+      ref.btn.textContent = fmt(it.cost) + ' ₡';
+      ref.btn.disabled = s.money < it.cost;
+    });
+  }
+
+  buildItemBar() {
+    const bar = document.getElementById('itembar');
+    this.itemRefs = {};
+    ITEMS.forEach(it => {
+      const btn = document.createElement('button');
+      btn.className = 'item-btn';
+      btn.dataset.item = it.id;
+      btn.innerHTML =
+        '<span class="ii" style="color:' + it.color + '">' + it.icon + '</span>' +
+        '<span class="iname">' + it.name.split(' ')[0].toUpperCase() + '</span>' +
+        '<span class="icount">0</span>';
+      btn.addEventListener('click', () => this.armItem(it.id));
+      bar.appendChild(btn);
+      this.itemRefs[it.id] = btn;
+    });
+  }
+
+  armItem(id) {
+    const b = this.game.battle;
+    if (!b || b.over) { this.toast('Deploy first — items are used in battle.'); return; }
+    if ((this.game.state.items[id] || 0) <= 0) {
+      this.armedItem = null;
+      this.showScreen('hangar');
+      this.toast('Out of ' + ITEM_BY_ID[id].name + ' — buy more in the hangar.');
+      return;
+    }
+    this.armedItem = this.armedItem === id ? null : id;
+    this.refreshItemBar();
+  }
+
+  refreshItemBar() {
+    if (!this.itemRefs) return;
+    const s = this.game.state;
+    const b = this.game.battle;
+    const live = !!b && !b.over;
+    ITEMS.forEach(it => {
+      const btn = this.itemRefs[it.id];
+      const have = s.items[it.id] || 0;
+      btn.querySelector('.icount').textContent = '×' + have;
+      btn.classList.toggle('armed', this.armedItem === it.id);
+      btn.classList.toggle('empty', have <= 0);
+      btn.disabled = !live;
+    });
+    const hint = document.getElementById('ib-hint');
+    hint.textContent = !live
+      ? 'NO ACTIVE ENGAGEMENT'
+      : this.armedItem
+        ? 'TAP A HOSTILE TO DEPLOY ' + ITEM_BY_ID[this.armedItem].name.toUpperCase()
+        : 'TAP AN ITEM, THEN TAP AN ENEMY';
+    hint.classList.toggle('hot', !!this.armedItem && live);
+  }
+
   /* ---------- skills ---------- */
   buildSkills() {
     const tree = document.getElementById('skill-tree');
@@ -582,6 +812,8 @@ class UI {
     this.refreshSkills();
     this.refreshControls();
     this.refreshStage();
+    this.refreshShop();
+    this.refreshItemBar();
     this.renderLog();
   }
 
@@ -692,6 +924,7 @@ class UI {
   loop(now) {
     const dtReal = Math.min(0.06, (now - this.last) / 1000);
     this.last = now;
+    this.lastFrameTs = Date.now();
     const g = this.game;
     const spd = g.state.speed;
     const dt = dtReal * spd;
@@ -717,8 +950,8 @@ class UI {
     if (this.acc > 0.12) {
       this.acc = 0;
       this.refreshHud();
-      if (this.screen === 'hangar') this.refreshHangar(false);
-      if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); }
+      if (this.screen === 'hangar') { this.refreshHangar(false); this.refreshShop(); }
+      if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); this.refreshItemBar(); }
       if (this.screen === 'skills') this.refreshSkills();
       this.renderLog();
     }
@@ -913,7 +1146,9 @@ class UI {
         anim: u.anim, walking: true, dir: isE ? -1 : 1,
         flash: u.flash, hero: u.isHero,
       });
-      if (u.jam > 0) {
+      u._hx = x; u._hy = y - 24 * s; u._hr = Math.max(24, 34 * s);
+      drawStatus(ctx, x, y, s, u);
+      if (u.jam > 0 && !(u.insane > 0)) {
         ctx.strokeStyle = 'rgba(192,123,255,0.8)'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(x, y - 30 * s, 14 * s, 0, 6.283); ctx.stroke();
       }
@@ -1083,6 +1318,19 @@ class UI {
       drawBar(ctx, a.x - 16, a.y - 56, 32, 4, a.hp / a.maxHp, '#4be08a');
     }
 
+    // escort minions
+    for (const m of b.minions || []) {
+      if (m.dead) continue;
+      drawMech(ctx, m.x, m.y, 0.72, ENEMY_PAL, {
+        kind: 'enemy', anim: m.anim, walking: true, dir: m.x > b.hero.x ? -1 : 1, flash: m.flash,
+      });
+      drawBar(ctx, m.x - 17, m.y - 56, 34, 4, m.hp / m.maxHp, '#ff5a6e');
+      drawStatus(ctx, m.x, m.y, 0.72, m);
+      m._hx = offX + m.x * sc;
+      m._hy = offY + (m.y - 22) * sc;
+      m._hr = 34;
+    }
+
     // boss
     const bo = b.boss;
     const bs = bo.major ? 3.0 : 2.2;
@@ -1094,6 +1342,10 @@ class UI {
     drawMech(ctx, bo.x, bo.y + bo.r * 0.55, bs, ENEMY_PAL, {
       kind: bo.major ? 'enemyE' : 'enemy', anim: bo.anim, walking: false, dir: -1, flash: 0,
     });
+    bo._hx = offX + bo.x * sc;
+    bo._hy = offY + (bo.y - bo.r * 0.4) * sc;
+    bo._hr = Math.max(44, bo.r * sc * 1.1);
+    drawStatus(ctx, bo.x, bo.y + bo.r * 0.55, bs * 0.75, bo);
     if (bo.enraged) {
       ctx.strokeStyle = 'rgba(255,90,60,' + (0.4 + 0.3 * Math.sin(performance.now() / 100)) + ')';
       ctx.lineWidth = 3;

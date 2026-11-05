@@ -313,6 +313,56 @@ body{
 .pip.on{background:var(--cyan);box-shadow:0 0 5px var(--cyan)}
 .optrow{display:flex;gap:8px}
 
+/* ---------- field supplies ---------- */
+.item-shop{display:flex;flex-direction:column;gap:7px}
+.item-card{
+  display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:7px;
+  border:1px solid #212a45;background:linear-gradient(165deg,#121728,#0d111d);
+}
+.ic-icon{
+  width:34px;height:34px;flex:0 0 auto;border-radius:7px;border:1px solid;
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.ic-body{flex:1;min-width:0}
+.ic-name{font:800 11px/1.2 'Segoe UI',sans-serif;letter-spacing:.6px;color:#dfe8f8}
+.ic-count{color:var(--cyan);font-size:10px;margin-left:6px}
+.ic-desc{font-size:9.5px;color:#7c88a8;margin-top:2px;line-height:1.35}
+.item-card .ic-buy{flex:0 0 auto;padding:7px 9px;font-size:10px}
+
+/* ---------- in-battle item bar ---------- */
+.itembar{display:flex;gap:6px;margin-bottom:8px;align-items:stretch}
+.ib-hint{
+  flex:1 1 100%;order:9;font-size:8px;letter-spacing:1.2px;color:#4f5c7a;
+  padding-top:4px;text-align:center;
+}
+.ib-hint.hot{color:var(--cyan)}
+.itembar{flex-wrap:wrap}
+.item-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
+  padding:8px 4px;border-radius:6px;cursor:pointer;
+  background:linear-gradient(180deg,#151b2e,#0e1220);
+  border:1px solid #2a3350;color:#9fb0d0;
+  font:800 9px/1 'Segoe UI',sans-serif;letter-spacing:.8px;
+  touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+}
+.item-btn .ii{font-size:14px;line-height:1}
+.item-btn .icount{color:#5f6d8c;font-variant-numeric:tabular-nums}
+.item-btn.armed{
+  border-color:var(--cyan);color:#dff3ff;background:linear-gradient(180deg,#0d3547,#082230);
+  box-shadow:0 0 12px #4fd1ff55;
+}
+.item-btn.empty{opacity:.4}
+.item-btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* ---------- d-pad: no long-press callout, no text selection ---------- */
+.mobilepad,.dpad,.abtn,#battle-canvas{
+  touch-action:none;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+}
+.dpad button.down,.abtn.down{
+  background:#2b3b5f;color:#fff;border-color:var(--cyan);box-shadow:0 0 10px #4fd1ff44;
+}
+
 @media (max-width:520px){
   .canvas-wrap{aspect-ratio:5/4;max-height:44vh}
   .detonate{padding:7px 10px;font-size:9px;opacity:.92}

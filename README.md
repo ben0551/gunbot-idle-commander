@@ -20,6 +20,8 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
 |---|---|---|
 | Anywhere | Click / tap tabs | Hangar · Battle · Skills |
 | Battle | `DEPLOY` | Start the current sector |
+| Battle | `1` `2` `3` | Arm Cryo / Incendiary / Cortex Spike |
+| Battle | tap an item, then tap an enemy | Deploy that item on it |
 | Battle (hero manual) | `◀ ▶` / `A D` / on-screen d-pad | Move your ace |
 | Battle (hero manual) | `Shift` / `K` / `B` | Block (75% damage reduction) |
 | Battle (hero manual) | `Space` / `J` / `A` button | Force a swing |
@@ -42,6 +44,12 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
 - **Trophies** — boss-only currency. Spends on the skill tree (Economy / Combat / Technology /
   Hero branches) or on Auto Battle (100 ★), which chains sectors forever.
 - **Manual hero** — toggle `MANUAL HERO` in a battle to steer the ace yourself.
+- **Field supplies** — bought with credits in the hangar, carried into any battle:
+  - **Cryo Grenade** (400 ₡) — target freezes solid for 4.5 s: no movement, no attacks.
+  - **Incendiary** (320 ₡) — target burns for 6 s at 5% max HP per second.
+  - **Cortex Spike** (900 ₡) — target is mind-hacked for 6 s and attacks its own side.
+  Boss battles now spawn **escort minions** so there is something worth targeting; a hacked
+  minion turns its guns on the boss, and a hacked boss shells its own escorts.
 
 ## Files
 
@@ -65,10 +73,10 @@ plays thousands of battles without a browser to sanity-check progression pacing.
 | 3 — Boss system (mini/major, loot → trophies, pending-boss queue) | Done |
 | 4 — Hero control (manual mode, A/B, mobile pad, top-down boss maps) | Done |
 | 5 — Endgame (Infinity tier, trophy skill tree, auto battle) | Done |
+| Consumables (heal potion / paralysis net in the spec) | Replaced by the cash item shop: Cryo / Incendiary / Cortex |
 
-Not built: prestige/reset loop, item drops as inventory objects (bosses pay trophies + credits +
-XP instead), consumable heal potion / paralysis net, suicide-unit manual activation outside the
-`DETONATE` button, and a per-run endless scaling curve.
+Not built: prestige/reset loop, item drops as loot objects (bosses pay trophies + credits + XP
+instead), and a per-run endless scaling curve.
 
 ## Balance notes
 
