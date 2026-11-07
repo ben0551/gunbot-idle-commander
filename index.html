@@ -135,6 +135,19 @@
       </div>
 
       <div id="skill-tree" class="skill-tree"></div>
+
+      <div class="sect-head">
+        <h2>REBIRTH</h2>
+        <div class="fieldinfo">run <b id="prestige-count">0</b></div>
+      </div>
+      <div id="rebirth-panel"></div>
+
+      <div class="sect-head">
+        <h2>SALVAGE</h2>
+        <div class="fieldinfo"><b id="salvage-bal">0</b> ◈</div>
+      </div>
+      <div id="salvage-shop" class="skill-tree"></div>
+
       <div class="sect-head"><h2>OPTIONS</h2></div>
       <div class="optrow">
         <button class="btn ctrl" id="save-btn">SAVE NOW</button>
@@ -144,6 +157,17 @@
       <div class="footpad"></div>
     </section>
   </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-title" id="modal-title">CONFIRM</div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions">
+        <button class="btn ctrl" id="modal-cancel">CANCEL</button>
+        <button class="btn danger" id="modal-ok">CONFIRM</button>
+      </div>
+    </div>
+  </div>
 
   <nav id="tabs">
     <button class="tab active" data-screen="hangar"><span>⚙</span>HANGAR</button>

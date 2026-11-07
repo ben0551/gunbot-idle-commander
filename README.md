@@ -44,6 +44,24 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
 - **Trophies** — boss-only currency. Spends on the skill tree (Economy / Combat / Technology /
   Hero branches) or on Auto Battle (100 ★), which chains sectors forever.
 - **Manual hero** — toggle `MANUAL HERO` in a battle to steer the ace yourself.
+- **Prestige (Scrap & Rebuild)** — once you reach **Lava tier (LV 150)** you can scrap the army.
+  Credits, units, unit levels, XP, chassis tier, hero level and frontier reset to zero. Trophies,
+  the whole skill tree, blueprints, supplies and salvage are kept. You bank **Salvage** based on
+  the best tier and frontier the run reached, then spend it on seven permanent upgrades:
+
+  | Upgrade | Effect | Ranks |
+  |---|---|---|
+  | Salvage Contracts | +20% credits, forever | 8 |
+  | Field Manuals | +20% XP, forever | 8 |
+  | War Doctrine | +15% unit/ace damage and HP | 8 |
+  | War Chest | start each run with more credits | 6 |
+  | Head Start | begin each run one tier higher | 4 |
+  | Trophy Hunter | +1 trophy per boss | 5 |
+  | Refinery | +15% salvage per rebirth | 6 |
+
+  Measured with the headless bot: first run reaches Lava in ~155 min, the second run takes ~120 min
+  on the same investment — and it compounds from there.
+
 - **Field supplies** — bought with credits in the hangar, carried into any battle. Arm one, then
   tap the target:
   - **Cryo Grenade** (400 ₡) — freezes one enemy solid for 4.5 s: no movement, no attacks.
@@ -82,9 +100,10 @@ plays thousands of battles without a browser to sanity-check progression pacing.
 | 5 — Endgame (Infinity tier, trophy skill tree, auto battle) | Done |
 | Consumables (heal potion + paralysis net) | Done — Repair Kit and Paralysis Net (upgradeable duration) |
 | Boss loot drops (credits / XP boost / damage buff / blueprint / item) | Done |
-| Prestige | **Not built** — three designs written up in `PRESTIGE-OPTIONS.md`, awaiting a decision |
+| Prestige — Scrap & Rebuild | Done — unlocks at Lava tier, pays Salvage, 7 permanent upgrades |
 
-Nothing else from the spec is outstanding.
+Nothing from the spec is outstanding. See `PRESTIGE-OPTIONS.md` for the alternatives not taken and
+the mega-boss idea parked for every 2nd rebirth.
 
 ## Balance notes
 

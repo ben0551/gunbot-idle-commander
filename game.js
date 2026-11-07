@@ -67,6 +67,19 @@ const ITEMS = [
   { id:'heal',     name:'Repair Kit',    cost:300, dur:0,   target:'ally',  color:'#7bffb6', icon:'✚',
     healPct:0.45, desc:'Restores 45% HP to one of your own units.' },
 ];
+const SALVAGE_UPGRADES = [
+  { id:'credits', name:'Salvage Contracts', max:8, base:8,  growth:1.8, desc:'+20% credits from battles, idle income and loot, forever.' },
+  { id:'xp',      name:'Field Manuals',     max:8, base:8,  growth:1.8, desc:'+20% XP from every battle, forever.' },
+  { id:'start',   name:'War Chest',         max:6, base:10, growth:2.0, desc:'Start each run with a bigger credit balance.' },
+  { id:'tier',    name:'Head Start',        max:4, base:40, growth:3.0, desc:'Begin each run one chassis tier higher.' },
+  { id:'trophy',  name:'Trophy Hunter',     max:5, base:25, growth:2.2, desc:'+1 trophy from every boss kill.' },
+  { id:'salvage', name:'Refinery',          max:6, base:30, growth:1.9, desc:'+15% salvage on every rebirth.' },
+  { id:'power',   name:'War Doctrine',      max:8, base:18, growth:1.95, desc:'+15% damage and HP for every unit and your ace, forever.' },
+];
+const SALVAGE_BY_ID = {};
+SALVAGE_UPGRADES.forEach(s => { SALVAGE_BY_ID[s.id] = s; });
+const PRESTIGE_TIER = 8;   // Lava — the earliest tier you may rebirth from
+
 const ITEM_BY_ID = {};
 ITEMS.forEach(i => { ITEM_BY_ID[i.id] = i; });
 
@@ -144,6 +157,11 @@ class Game {
       buffs: { xp: 0, atk: 0 },
       blueprints: {},
       lastDrops: [],
+      salvage: 0,
+      prestiges: 0,
+      salvageUpgrades: {},
+      runTier: 0,
+      runFrontier: 1,
     };
     UNITS.forEach(u => { this.state.units[u.id] = { count: 0, level: 1 }; });
     this.battle = null;
@@ -168,6 +186,7 @@ class Game {
         bossesKilled: 0, speed: 1, lastTick: Date.now(), seenTiers: 1,
         items: { freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 },
         itemLevels: { net: 1 }, buffs: { xp: 0, atk: 0 }, blueprints: {}, lastDrops: [],
+        salvage: 0, prestiges: 0, salvageUpgrades: {}, runTier: 0, runFrontier: 1,
       };
       this.state = Object.assign(base, s);
       this.state.speed = 1;
@@ -178,6 +197,9 @@ class Game {
       this.state.itemLevels = Object.assign({ net: 1 }, s.itemLevels || {});
       this.state.buffs = Object.assign({ xp: 0, atk: 0 }, s.buffs || {});
       this.state.blueprints = s.blueprints || {};
+      this.state.salvageUpgrades = s.salvageUpgrades || {};
+      this.state.runTier = s.runTier === undefined ? this.state.tierIndex : s.runTier;
+      this.state.runFrontier = s.runFrontier === undefined ? this.state.battleNumber : s.runFrontier;
       // offline income
       const elapsed = clamp((Date.now() - (s.lastTick || Date.now())) / 1000, 0, 8 * 3600);
       const gain = this.idlePerSec() * elapsed * 0.6;
@@ -200,6 +222,78 @@ class Game {
   skill(id) { return this.state.skills[id] || 0; }
   atkBuff() { return (this.state.buffs && this.state.buffs.atk > 0) ? 1.5 : 1; }
   xpBuff() { return (this.state.buffs && this.state.buffs.xp > 0) ? 1.5 : 1; }
+
+  /* ---------- salvage (prestige) ---------- */
+  salvageUpg(id) { return (this.state.salvageUpgrades && this.state.salvageUpgrades[id]) || 0; }
+  creditsMult() { return 1 + 0.20 * this.salvageUpg('credits'); }
+  powerMult() { return 1 + 0.15 * this.salvageUpg('power'); }
+  salvageXpMult() { return 1 + 0.20 * this.salvageUpg('xp'); }
+  salvageCost(id) {
+    const def = SALVAGE_BY_ID[id];
+    if (!def) return 0;
+    const lv = this.salvageUpg(id);
+    if (lv >= def.max) return 0;
+    return Math.floor(def.base * Math.pow(def.growth, lv));
+  }
+  buySalvage(id) {
+    const def = SALVAGE_BY_ID[id];
+    if (!def) return false;
+    const lv = this.salvageUpg(id);
+    if (lv >= def.max) return false;
+    const c = this.salvageCost(id);
+    if (this.state.salvage < c) return false;
+    this.state.salvage -= c;
+    this.state.salvageUpgrades[id] = lv + 1;
+    this.log('Salvage spent: ' + def.name + ' MK' + (lv + 1) + '.', 'tier');
+    this.save(); this.emit();
+    return true;
+  }
+  canPrestige() { return this.state.tierIndex >= PRESTIGE_TIER; }
+  salvageGain() {
+    const tier = Math.max(PRESTIGE_TIER, this.state.runTier || 0);
+    const front = Math.max(1, this.state.runFrontier || 1);
+    const raw = Math.pow(tier + 1, 2) * 3 + Math.pow(front, 1.3) / 4;
+    return Math.floor(raw * (1 + 0.15 * this.salvageUpg('salvage')));
+  }
+
+  prestige() {
+    if (!this.canPrestige()) return 0;
+    const gain = this.salvageGain();
+    const kept = {
+      trophies: this.state.trophies,
+      skills: this.state.skills,
+      blueprints: this.state.blueprints,
+      items: this.state.items,
+      itemLevels: this.state.itemLevels,
+      salvage: this.state.salvage + gain,
+      salvageUpgrades: this.state.salvageUpgrades,
+      prestiges: this.state.prestiges + 1,
+      autoBattleOwned: this.state.autoBattleOwned,
+      bossesKilled: this.state.bossesKilled,
+    };
+    const hs = this.salvageUpg('tier');
+    const chest = this.salvageUpg('start');
+
+    this.reset(true);
+    Object.assign(this.state, kept);
+    this.state.tierIndex = Math.min(9, hs);
+    this.state.seenTiers = this.state.tierIndex + 1;
+    this.state.runTier = this.state.tierIndex;
+    this.state.runFrontier = 1;
+    this.state.money = chest > 0 ? Math.floor(500 * Math.pow(3, chest - 1)) : 40;
+    this.state.buffs = { xp: 0, atk: 0 };
+    this.state.stage = 1;
+    this.state.battleNumber = 1;
+    this.state.pendingBoss = null;
+    this.state.lastDrops = [];
+    this.battle = null;
+
+    this.log('ARMY SCRAPPED. Rebirth #' + this.state.prestiges + ' — banked ' + gain + ' salvage.', 'tier');
+    if (hs > 0) this.log('Head Start: beginning at ' + TIERS[this.state.tierIndex].name + ' tier.', 'good');
+    if (chest > 0) this.log('War Chest: starting with ' + fmt(this.state.money) + ' credits.', 'good');
+    this.save(); this.emit();
+    return gain;
+  }
   itemDuration(id) {
     const d = ITEM_BY_ID[id];
     if (!d) return 0;
@@ -233,6 +327,7 @@ class Game {
       if (ti > this.state.tierIndex) {
         this.state.tierIndex = ti;
         this.state.seenTiers = ti + 1;
+        this.state.runTier = Math.max(this.state.runTier || 0, ti);
         this.log('TIER UNLOCKED — ' + TIERS[ti].name + '. New chassis available in the hangar.', 'tier');
       }
     }
@@ -250,9 +345,9 @@ class Game {
     const lm = this.levelMult(st.level);
     const tb = this.tierBonus();
     return {
-      hp: u.base.hp * lm * tb * (1 + 0.15 * this.skill('com3')),
-      atk: u.base.atk * lm * tb * (1 + 0.12 * this.skill('com1')) * this.atkBuff(),
-      def: u.base.def * lm * tb,
+      hp: u.base.hp * lm * tb * (1 + 0.15 * this.skill('com3')) * this.powerMult(),
+      atk: u.base.atk * lm * tb * (1 + 0.12 * this.skill('com1')) * this.atkBuff() * this.powerMult(),
+      def: u.base.def * lm * tb * this.powerMult(),
       spd: u.base.spd,
       range: u.base.range,
       aspd: u.base.aspd / (1 + 0.07 * this.skill('com2')),
@@ -264,9 +359,9 @@ class Game {
     const lm = 1 + 0.12 * (this.state.heroLevel - 1);
     const tb = this.tierBonus();
     return {
-      hp: 300 * lm * tb * (1 + 0.15 * this.skill('her2')),
-      atk: 26 * lm * tb * (1 + 0.15 * this.skill('her1')) * this.atkBuff(),
-      def: 10 * lm * tb,
+      hp: 300 * lm * tb * (1 + 0.15 * this.skill('her2')) * this.powerMult(),
+      atk: 26 * lm * tb * (1 + 0.15 * this.skill('her1')) * this.atkBuff() * this.powerMult(),
+      def: 10 * lm * tb * this.powerMult(),
       spd: 60,
       range: 62,
       aspd: 0.55,
@@ -307,7 +402,7 @@ class Game {
     // foundry: dedicated money printer, linear in level
     const f = this.state.units.foundry;
     if (f.count) base += 60 * f.count * (1 + 0.55 * (f.level - 1));
-    return base * (1 + 0.25 * this.skill('eco2'));
+    return base * (1 + 0.25 * this.skill('eco2')) * this.creditsMult();
   }
 
   /* ---------- actions ---------- */
@@ -446,8 +541,8 @@ class Game {
     const moneyMul = (1 + 0.2 * this.skill('eco1')) * (isBoss ? (kind === 'major' ? 9 : 4.5) : 1);
     const xpMul = (1 + 0.18 * this.skill('tec2')) * (isBoss ? (kind === 'major' ? 8 : 4) : 1);
     return {
-      money: Math.floor(30 * Math.pow(1.13, stage - 1) * moneyMul),
-      xp: Math.floor(11 * Math.pow(1.16, stage - 1) * xpMul * this.xpBuff()),
+      money: Math.floor(30 * Math.pow(1.13, stage - 1) * moneyMul * this.creditsMult()),
+      xp: Math.floor(11 * Math.pow(1.16, stage - 1) * xpMul * this.xpBuff() * this.salvageXpMult()),
     };
   }
 
@@ -455,7 +550,8 @@ class Game {
     this.state.totalBattles++;
     if (result.mode === 'boss') {
       if (result.win) {
-        const troph = result.kind === 'major' ? 5 + Math.floor(this.state.wins / 20) : 2;
+        const baseTroph = result.kind === 'major' ? 5 + Math.floor(this.state.wins / 20) : 2;
+        const troph = baseTroph + this.salvageUpg('trophy');
         this.state.trophies += troph;
         this.state.bossesKilled++;
         this.state.pendingBoss = null;
@@ -481,7 +577,11 @@ class Game {
       this.state.xp += r.xp;
       this.state.wins++;
       const beatCurrent = this.state.stage >= this.state.battleNumber;
-      if (beatCurrent) { this.state.battleNumber = this.state.stage + 1; this.state.stage = this.state.battleNumber; }
+      if (beatCurrent) {
+        this.state.battleNumber = this.state.stage + 1;
+        this.state.stage = this.state.battleNumber;
+        this.state.runFrontier = Math.max(this.state.runFrontier || 1, this.state.battleNumber);
+      }
       this.checkLevelUp();
       this.log('Sector ' + result.stage + ' cleared. +' + fmt(r.money) + ' credits, +' + fmt(r.xp) + ' XP.', 'good');
       // boss scheduling

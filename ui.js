@@ -331,6 +331,7 @@ class UI {
     this.buildSkills();
     this.buildShop();
     this.buildItemBar();
+    this.buildSalvage();
     this.bind();
     this.resize();
     this.refreshAll(true);
@@ -399,6 +400,17 @@ class UI {
         this.game.reset();
         this.buildGrid(); this.buildSkills(); this.refreshAll(true);
       }
+    });
+
+    // modal
+    document.getElementById('modal-cancel').addEventListener('click', () => this.hideModal());
+    document.getElementById('modal-ok').addEventListener('click', () => {
+      const fn = this.modalAction;
+      this.hideModal();
+      if (fn) fn();
+    });
+    document.getElementById('modal').addEventListener('click', e => {
+      if (e.target.id === 'modal') this.hideModal();
     });
 
     // overlay continue
@@ -488,7 +500,7 @@ class UI {
     this.screen = name;
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.screen === name));
-    if (name === 'skills') this.refreshSkills();
+    if (name === 'skills') { this.refreshSkills(); this.refreshSalvage(); this.refreshRebirth(); }
     if (name === 'hangar') { this.refreshHangar(true); this.refreshShop(); }
   }
 
@@ -779,6 +791,121 @@ class UI {
     hint.classList.toggle('hot', !!this.armedItem && live);
   }
 
+  /* ---------- rebirth / salvage ---------- */
+  buildSalvage() {
+    const tree = document.getElementById('salvage-shop');
+    tree.innerHTML = '';
+    this.salvageRefs = {};
+    SALVAGE_UPGRADES.forEach(sk => {
+      const node = document.createElement('div');
+      node.className = 'skill-node';
+      node.innerHTML =
+        '<div class="sn-info">' +
+          '<div class="sn-name">' + sk.name + '<span class="sn-rank"></span></div>' +
+          '<div class="sn-desc">' + sk.desc + '</div>' +
+          '<div class="pips"></div>' +
+        '</div>' +
+        '<button class="btn cyan">' + sk.base + ' ◈</button>';
+      tree.appendChild(node);
+      const btn = node.querySelector('button');
+      btn.addEventListener('click', () => {
+        if (!this.game.buySalvage(sk.id)) this.toast('Not enough salvage.');
+      });
+      this.salvageRefs[sk.id] = { node, btn, rank: node.querySelector('.sn-rank'), pips: node.querySelector('.pips') };
+    });
+  }
+
+  refreshSalvage() {
+    if (!this.salvageRefs) return;
+    const g = this.game, s = g.state;
+    document.getElementById('salvage-bal').textContent = fmt(s.salvage);
+    document.getElementById('prestige-count').textContent = s.prestiges;
+    SALVAGE_UPGRADES.forEach(sk => {
+      const ref = this.salvageRefs[sk.id];
+      const lv = g.salvageUpg(sk.id);
+      ref.rank.textContent = lv + '/' + sk.max;
+      const maxed = lv >= sk.max;
+      ref.btn.textContent = maxed ? 'MAX' : fmt(g.salvageCost(sk.id)) + ' ◈';
+      ref.btn.disabled = maxed || s.salvage < g.salvageCost(sk.id);
+      ref.node.classList.toggle('maxed', maxed);
+      if (ref.pips.childElementCount !== sk.max) {
+        ref.pips.innerHTML = '';
+        for (let i = 0; i < sk.max; i++) {
+          const p = document.createElement('div');
+          p.className = 'pip';
+          ref.pips.appendChild(p);
+        }
+      }
+      Array.from(ref.pips.children).forEach((p, i) => p.classList.toggle('on', i < lv));
+    });
+  }
+
+  refreshRebirth() {
+    const g = this.game, s = g.state;
+    const panel = document.getElementById('rebirth-panel');
+    if (!g.canPrestige()) {
+      const nextT = TIERS[PRESTIGE_TIER];
+      panel.innerHTML =
+        '<div class="rebirth-locked">' +
+          '<div class="rl-title">REBIRTH LOCKED</div>' +
+          '<div class="rl-sub">Scrap the army to earn salvage. Unlocks at <b>' + nextT.name.toUpperCase() +
+          '</b> tier — LV ' + nextT.xpReq + '.</div>' +
+          '<div class="rl-now">You are ' + g.tier().name.toUpperCase() + ' · LV ' + s.level + '</div>' +
+        '</div>';
+      return;
+    }
+    const gain = g.salvageGain();
+    panel.innerHTML =
+      '<div class="rebirth-card">' +
+        '<div class="rb-head">SCRAP AND REBUILD</div>' +
+        '<div class="rb-row"><span>Salvage on offer</span><b>+' + fmt(gain) + ' ◈</b></div>' +
+        '<div class="rb-row"><span>Best this run</span><b>' + TIERS[s.runTier].name + ' · sector ' + s.runFrontier + '</b></div>' +
+        '<div class="rb-warn">Units, credits, XP, tiers, hero and frontier reset. Trophies, skills, blueprints, supplies and salvage are kept.</div>' +
+        '<button class="btn danger rb-btn" id="rebirth-btn">SCRAP THE ARMY</button>' +
+      '</div>';
+    const btn = document.getElementById('rebirth-btn');
+    if (btn) btn.addEventListener('click', () => this.askRebirth(gain));
+  }
+
+  askRebirth(gain) {
+    const g = this.game, s = g.state;
+    this.showModal(
+      'SCRAP THE ARMY?',
+      'This wipes your army and starts a fresh run.<br><br>' +
+      '<b>LOST:</b> credits, all units and their levels, XP and level, chassis tier, hero level, frontier.<br>' +
+      '<b>KEPT:</b> ' + fmt(s.trophies) + ' trophies, all skill ranks, ' + Object.keys(s.blueprints).length +
+      ' blueprints, your supplies, and your salvage.<br><br>' +
+      'You will bank <b>' + fmt(gain) + ' ◈ salvage</b> and be reborn at ' +
+      (g.salvageUpg('tier') > 0 ? TIERS[Math.min(9, g.salvageUpg('tier'))].name + ' tier' : 'Wood tier') + '.',
+      'SCRAP · +' + fmt(gain) + ' ◈',
+      () => {
+        const got = g.prestige();
+        this.armedItem = null;
+        this.buildGrid();
+        this.buildSkills();
+        this.buildSalvage();
+        this.refreshAll(true);
+        this.showScreen('skills');
+        this.toast('Rebirth complete — ' + fmt(got) + ' salvage banked.');
+      }
+    );
+  }
+
+  showModal(title, bodyHtml, okLabel, onOk) {
+    const m = document.getElementById('modal');
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-body').innerHTML = bodyHtml;
+    const ok = document.getElementById('modal-ok');
+    ok.textContent = okLabel;
+    this.modalAction = onOk;
+    m.classList.remove('hidden');
+  }
+
+  hideModal() {
+    document.getElementById('modal').classList.add('hidden');
+    this.modalAction = null;
+  }
+
   /* ---------- skills ---------- */
   buildSkills() {
     const tree = document.getElementById('skill-tree');
@@ -852,6 +979,8 @@ class UI {
     this.refreshStage();
     this.refreshShop();
     this.refreshItemBar();
+    this.refreshSalvage();
+    this.refreshRebirth();
     this.renderLog();
   }
 
@@ -1008,7 +1137,7 @@ class UI {
       this.refreshHud();
       if (this.screen === 'hangar') { this.refreshHangar(false); this.refreshShop(); }
       if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); this.refreshItemBar(); }
-      if (this.screen === 'skills') this.refreshSkills();
+      if (this.screen === 'skills') { this.refreshSkills(); this.refreshSalvage(); }
       this.renderLog();
     }
 
