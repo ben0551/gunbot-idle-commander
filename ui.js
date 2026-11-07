@@ -332,6 +332,7 @@ class UI {
     this.buildShop();
     this.buildItemBar();
     this.buildSalvage();
+    this.buildAwards();
     this.bind();
     this.resize();
     this.refreshAll(true);
@@ -501,6 +502,7 @@ class UI {
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.screen === name));
     if (name === 'skills') { this.refreshSkills(); this.refreshSalvage(); this.refreshRebirth(); }
+    if (name === 'medals') this.refreshAwards();
     if (name === 'hangar') { this.refreshHangar(true); this.refreshShop(); }
   }
 
@@ -791,6 +793,83 @@ class UI {
     hint.classList.toggle('hot', !!this.armedItem && live);
   }
 
+  /* ---------- medals ---------- */
+  buildAwards() {
+    const list = document.getElementById('medal-list');
+    list.innerHTML = '';
+    this.medalRefs = {};
+    const groups = [];
+    ACHIEVEMENTS.forEach(a => { if (groups.indexOf(a.group) < 0) groups.push(a.group); });
+    groups.forEach(gr => {
+      const wrap = document.createElement('div');
+      wrap.innerHTML = '<div class="branch-head">' + gr.toUpperCase() + '</div>';
+      ACHIEVEMENTS.filter(a => a.group === gr).forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'medal';
+        row.innerHTML =
+          '<div class="md-icon">' + a.icon + '</div>' +
+          '<div class="md-body">' +
+            '<div class="md-name">' + a.name + '</div>' +
+            '<div class="md-desc">' + a.desc + '</div>' +
+            '<div class="md-prog"><div class="md-fill"></div><span class="md-num"></span></div>' +
+          '</div>' +
+          '<div class="md-tick">✓</div>';
+        wrap.appendChild(row);
+        this.medalRefs[a.id] = {
+          row, fill: row.querySelector('.md-fill'),
+          num: row.querySelector('.md-num'), prog: row.querySelector('.md-prog'),
+        };
+      });
+      list.appendChild(wrap);
+    });
+    document.getElementById('ach-total').textContent = '/ ' + ACHIEVEMENTS.length;
+    this.refreshAwards();
+  }
+
+  refreshAwards() {
+    if (!this.medalRefs) return;
+    const g = this.game;
+    const got = g.state.achievements || {};
+    const n = Object.keys(got).length;
+    document.getElementById('ach-count').textContent = n;
+    document.getElementById('ach-fill').style.width = (n / ACHIEVEMENTS.length * 100).toFixed(1) + '%';
+    ACHIEVEMENTS.forEach(a => {
+      const ref = this.medalRefs[a.id];
+      const unlocked = !!got[a.id];
+      ref.row.classList.toggle('unlocked', unlocked);
+      let p = null;
+      try { p = a.prog ? a.prog(g) : null; } catch (e) { p = null; }
+      if (!unlocked && p) {
+        ref.prog.style.display = 'block';
+        const pct = clamp(p[0] / Math.max(1, p[1]), 0, 1);
+        ref.fill.style.width = (pct * 100).toFixed(1) + '%';
+        const exact = n => n < 10000 ? String(Math.round(n)) : fmt(n);
+        ref.num.textContent = exact(Math.min(p[0], p[1])) + ' / ' + exact(p[1]);
+      } else {
+        ref.prog.style.display = 'none';
+      }
+    });
+  }
+
+  showMedalToast(a) {
+    const el = document.getElementById('achv-toast');
+    document.getElementById('at-icon').textContent = a.icon;
+    document.getElementById('at-name').textContent = a.name;
+    el.classList.add('show');
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => el.classList.remove('show'), 2900);
+  }
+
+  drainMedals() {
+    const q = this.game.newAchievements;
+    if (!q || !q.length || this.toastBusy) return;
+    const a = q.shift();
+    this.toastBusy = true;
+    this.showMedalToast(a);
+    this.refreshAwards();
+    setTimeout(() => { this.toastBusy = false; }, 3100);
+  }
+
   /* ---------- rebirth / salvage ---------- */
   buildSalvage() {
     const tree = document.getElementById('salvage-shop');
@@ -885,6 +964,7 @@ class UI {
         this.buildSkills();
         this.buildSalvage();
         this.refreshAll(true);
+        this.refreshAwards();
         this.showScreen('skills');
         this.toast('Rebirth complete — ' + fmt(got) + ' salvage banked.');
       }
@@ -981,6 +1061,7 @@ class UI {
     this.refreshItemBar();
     this.refreshSalvage();
     this.refreshRebirth();
+    this.refreshAwards();
     this.renderLog();
   }
 
@@ -1138,6 +1219,8 @@ class UI {
       if (this.screen === 'hangar') { this.refreshHangar(false); this.refreshShop(); }
       if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); this.refreshItemBar(); }
       if (this.screen === 'skills') { this.refreshSkills(); this.refreshSalvage(); }
+      if (this.screen === 'medals') this.refreshAwards();
+      this.drainMedals();
       this.renderLog();
     }
 

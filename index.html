@@ -119,6 +119,18 @@
       <div class="footpad"></div>
     </section>
 
+    <!-- ============ MEDALS ============ -->
+    <section id="screen-medals" class="screen">
+      <div class="medal-head">
+        <div class="mh-num"><span id="ach-count">0</span><span class="mh-of" id="ach-total">/ 0</span></div>
+        <div class="mh-label">MEDALS EARNED</div>
+        <div class="mh-bar"><div id="ach-fill"></div></div>
+        <div class="mh-sub">Medals survive rebirth. They are the only thing that never resets.</div>
+      </div>
+      <div id="medal-list"></div>
+      <div class="footpad"></div>
+    </section>
+
     <!-- ============ SKILLS ============ -->
     <section id="screen-skills" class="screen">
       <div class="trophy-head">
@@ -158,6 +170,8 @@
     </section>
   </main>
 
+  <div id="achv-toast" class="achv-toast"><span class="at-icon" id="at-icon">◈</span><div><div class="at-title">MEDAL EARNED</div><div class="at-name" id="at-name"></div></div></div>
+
   <div id="modal" class="modal hidden">
     <div class="modal-card">
       <div class="modal-title" id="modal-title">CONFIRM</div>
@@ -172,6 +186,7 @@
   <nav id="tabs">
     <button class="tab active" data-screen="hangar"><span>⚙</span>HANGAR</button>
     <button class="tab" data-screen="battle"><span>⚔</span>BATTLE<b id="tab-dot" class="dot hidden"></b></button>
+    <button class="tab" data-screen="medals"><span>◈</span>MEDALS</button>
     <button class="tab" data-screen="skills"><span>★</span>SKILLS</button>
   </nav>
 </div>

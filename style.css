@@ -350,6 +350,52 @@ body{
 .modal-actions{display:flex;gap:8px;margin-top:14px}
 .modal-actions .btn{flex:1;padding:11px 8px}
 
+/* ---------- medals ---------- */
+.medal-head{
+  padding:14px;border-radius:9px;margin-bottom:14px;text-align:center;
+  background:radial-gradient(120% 150% at 50% 0%, #1d2b45, #0d1120);
+  border:1px solid #2b3a5c;
+}
+.mh-num{font:900 34px/1 'Segoe UI',sans-serif;color:var(--gold);letter-spacing:1px}
+.mh-of{font-size:15px;color:#6a7896;margin-left:6px;letter-spacing:0}
+.mh-label{font:800 9px/1 'Segoe UI',sans-serif;letter-spacing:3px;color:#7c88a8;margin-top:6px}
+.mh-bar{height:4px;border-radius:2px;background:#ffffff12;margin:10px 0 8px;overflow:hidden}
+#ach-fill{height:100%;width:0;background:linear-gradient(90deg,#ffc44d,#ff8a5c);box-shadow:0 0 10px #ffc44d66;transition:width .3s}
+.mh-sub{font-size:9.5px;color:#5f6d8c;letter-spacing:.4px}
+
+.medal{
+  display:flex;align-items:center;gap:10px;padding:9px;border-radius:7px;
+  border:1px solid #1c2338;background:#0c111c;margin-bottom:6px;opacity:.62;
+  transition:opacity .25s,border-color .25s,background .25s;
+}
+.medal.unlocked{opacity:1;border-color:#7a5c1d;background:linear-gradient(120deg,#211a0a,#12100c)}
+.md-icon{
+  width:34px;height:34px;flex:0 0 auto;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#4f5c7a;border:1px solid #2a3350;background:#0e1320;
+}
+.medal.unlocked .md-icon{color:var(--gold);border-color:#7a5c1d;background:#3a2d1055;box-shadow:0 0 12px #ffc44d33}
+.md-body{flex:1;min-width:0}
+.md-name{font:800 11px/1.2 'Segoe UI',sans-serif;letter-spacing:.6px;color:#8b98b8}
+.medal.unlocked .md-name{color:#ffe9a3}
+.md-desc{font-size:9.5px;color:#67718f;margin-top:2px;line-height:1.35}
+.md-prog{position:relative;height:3px;border-radius:2px;background:#ffffff10;margin-top:6px;display:none}
+.md-fill{position:absolute;inset:0;width:0;background:#4fd1ff;border-radius:2px}
+.md-num{position:absolute;right:0;top:-13px;font-size:8px;color:#5f6d8c;font-variant-numeric:tabular-nums}
+.md-tick{color:#4be08a;font-size:13px;opacity:0;flex:0 0 auto}
+.medal.unlocked .md-tick{opacity:1}
+
+.achv-toast{
+  position:fixed;top:12px;left:50%;transform:translate(-50%,-140%);
+  display:flex;align-items:center;gap:10px;z-index:60;
+  padding:9px 14px;border-radius:8px;border:1px solid #7a5c1d;
+  background:linear-gradient(160deg,#3a2d10,#181208);box-shadow:0 10px 30px #000a;
+  transition:transform .35s cubic-bezier(.2,1.4,.4,1);
+}
+.achv-toast.show{transform:translate(-50%,0)}
+.at-icon{font-size:18px;color:var(--gold)}
+.at-title{font:800 8px/1 'Segoe UI',sans-serif;letter-spacing:2.4px;color:#b8934a}
+.at-name{font:800 12px/1.2 'Segoe UI',sans-serif;color:#ffe9a3;margin-top:3px}
+
 /* ---------- field supplies ---------- */
 .item-shop{display:flex;flex-direction:column;gap:7px}
 .item-card{

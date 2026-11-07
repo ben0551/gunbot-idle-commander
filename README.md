@@ -18,7 +18,7 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
 
 | Where | Input | Action |
 |---|---|---|
-| Anywhere | Click / tap tabs | Hangar · Battle · Skills |
+| Anywhere | Click / tap tabs | Hangar · Battle · Medals · Skills |
 | Battle | `DEPLOY` | Start the current sector |
 | Battle | `1`–`5` | Arm Cryo / Incendiary / Cortex / Paralysis / Repair |
 | Battle | tap an item, then tap an enemy | Deploy that item on it |
@@ -44,6 +44,12 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
 - **Trophies** — boss-only currency. Spends on the skill tree (Economy / Combat / Technology /
   Hero branches) or on Auto Battle (100 ★), which chains sectors forever.
 - **Manual hero** — toggle `MANUAL HERO` in a battle to steer the ace yourself.
+- **Medals (achievements)** — 29 permanent achievements across Combat, Bosses, Economy, Progress,
+  Rebirth and Oddities: first blood, first loss, first rebirth, 100/1,000/10,000 kills, flawless
+  wins, boss milestones, credit milestones, sector milestones, every chassis owned, every supply
+  owned, 3-enemies-in-one-net, and so on. **Medals never reset** — not on rebirth, not on a new
+  run. Locked medals show live progress bars (e.g. `347 / 1,000`), and unlocking one pops a banner.
+
 - **Prestige (Scrap & Rebuild)** — once you reach **Lava tier (LV 150)** you can scrap the army.
   Credits, units, unit levels, XP, chassis tier, hero level and frontier reset to zero. Trophies,
   the whole skill tree, blueprints, supplies and salvage are kept. You bank **Salvage** based on
@@ -101,6 +107,7 @@ plays thousands of battles without a browser to sanity-check progression pacing.
 | Consumables (heal potion + paralysis net) | Done — Repair Kit and Paralysis Net (upgradeable duration) |
 | Boss loot drops (credits / XP boost / damage buff / blueprint / item) | Done |
 | Prestige — Scrap & Rebuild | Done — unlocks at Lava tier, pays Salvage, 7 permanent upgrades |
+| Achievements | Done — 29 permanent medals, survive rebirth |
 
 Nothing from the spec is outstanding. See `PRESTIGE-OPTIONS.md` for the alternatives not taken and
 the mega-boss idea parked for every 2nd rebirth.

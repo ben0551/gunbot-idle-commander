@@ -80,6 +80,53 @@ const SALVAGE_BY_ID = {};
 SALVAGE_UPGRADES.forEach(s => { SALVAGE_BY_ID[s.id] = s; });
 const PRESTIGE_TIER = 8;   // Lava — the earliest tier you may rebirth from
 
+const ACHIEVEMENTS = [
+  // --- combat ---
+  { id:'firstblood',  name:'First Blood',        icon:'✖', group:'Combat',   desc:'Destroy your first enemy mech.',            test:g=>g.state.life.kills>=1,    prog:g=>[g.state.life.kills,1] },
+  { id:'centurion',   name:'Centurion',          icon:'❖', group:'Combat',   desc:'Destroy 100 enemy mechs.',                  test:g=>g.state.life.kills>=100,  prog:g=>[g.state.life.kills,100] },
+  { id:'exterminator',name:'Exterminator',       icon:'✸', group:'Combat',   desc:'Destroy 1,000 enemy mechs.',                test:g=>g.state.life.kills>=1000, prog:g=>[g.state.life.kills,1000] },
+  { id:'extinction',  name:'Extinction Event',   icon:'☠', group:'Combat',   desc:'Destroy 10,000 enemy mechs.',               test:g=>g.state.life.kills>=10000,prog:g=>[g.state.life.kills,10000] },
+  { id:'baptism',     name:'Baptism of Fire',    icon:'✜', group:'Combat',   desc:'Lose your first battle. Everybody starts somewhere.', test:g=>g.state.life.losses>=1 },
+  { id:'comeback',    name:'Comeback Kid',       icon:'↻', group:'Combat',   desc:'Win 5 battles in a row.',                   test:g=>g.state.life.bestStreak>=5, prog:g=>[g.state.life.bestStreak,5] },
+  { id:'flawless',    name:'Flawless',           icon:'◇', group:'Combat',   desc:'Win a battle without losing a single unit.',test:g=>g.state.life.perfectWins>=1 },
+  { id:'untouchable', name:'Untouchable',        icon:'◈', group:'Combat',   desc:'Win 10 battles without losing a unit.',     test:g=>g.state.life.perfectWins>=10, prog:g=>[g.state.life.perfectWins,10] },
+  // --- bosses ---
+  { id:'bossbreaker', name:'Boss Breaker',       icon:'★', group:'Bosses',   desc:'Destroy a mini-boss.',                      test:g=>g.state.life.bosses>=1 },
+  { id:'titanslayer', name:'Titan Slayer',       icon:'☆', group:'Bosses',   desc:'Destroy a major boss.',                     test:g=>g.state.life.majorBosses>=1 },
+  { id:'bosshunter',  name:'Boss Hunter',        icon:'✵', group:'Bosses',   desc:'Destroy 25 bosses.',                        test:g=>g.state.life.bosses>=25,  prog:g=>[g.state.life.bosses,25] },
+  { id:'bossrush',    name:'Boss Rush',          icon:'✷', group:'Bosses',   desc:'Destroy 100 bosses.',                       test:g=>g.state.life.bosses>=100, prog:g=>[g.state.life.bosses,100] },
+  // --- economy ---
+  { id:'pocketmoney', name:'Pocket Change',      icon:'₡', group:'Economy',  desc:'Earn 10K credits in total.',                test:g=>g.state.life.credits>=1e4, prog:g=>[g.state.life.credits,1e4] },
+  { id:'millionaire', name:'Millionaire',        icon:'₡', group:'Economy',  desc:'Earn 1M credits in total.',                 test:g=>g.state.life.credits>=1e6, prog:g=>[g.state.life.credits,1e6] },
+  { id:'tycoon',      name:'Tycoon',             icon:'₡', group:'Economy',  desc:'Earn 1B credits in total.',                 test:g=>g.state.life.credits>=1e9, prog:g=>[g.state.life.credits,1e9] },
+  { id:'collector',   name:'Collector',          icon:'▣', group:'Economy',  desc:'Own at least one of every chassis type.',   test:g=>Object.keys(g.state.life.kinds||{}).length>=UNITS.length, prog:g=>[Object.keys(g.state.life.kinds||{}).length,UNITS.length] },
+  { id:'hoarder',     name:'Hoarder',            icon:'▤', group:'Economy',  desc:'Have 50 units in the hangar at once.',      test:g=>g.state.life.maxOwned>=50, prog:g=>[g.state.life.maxOwned,50] },
+  // --- progression ---
+  { id:'deepspace',   name:'Deep Space',         icon:'▷', group:'Progress', desc:'Reach sector 50.',                          test:g=>g.state.life.maxSector>=50,  prog:g=>[g.state.life.maxSector,50] },
+  { id:'voidwalker',  name:'Void Walker',        icon:'▶', group:'Progress', desc:'Reach sector 100.',                         test:g=>g.state.life.maxSector>=100, prog:g=>[g.state.life.maxSector,100] },
+  { id:'goldenage',   name:'Golden Age',         icon:'✧', group:'Progress', desc:'Unlock the Gold chassis tier.',             test:g=>g.state.life.maxTier>=3 },
+  { id:'infinity',    name:'Infinity and Beyond',icon:'✺', group:'Progress', desc:'Unlock the Infinity tier.',                 test:g=>g.state.life.maxTier>=9 },
+  { id:'fullyloaded', name:'Fully Loaded',       icon:'⛭', group:'Progress', desc:'Take any chassis to level 50.',             test:g=>g.state.life.maxUnitLevel>=50, prog:g=>[g.state.life.maxUnitLevel,50] },
+  // --- rebirth ---
+  { id:'reborn',      name:'Reborn',             icon:'↺', group:'Rebirth',  desc:'Scrap the army and rebirth once.',          test:g=>g.state.life.rebirths>=1 },
+  { id:'scrapper',    name:'Scrap Merchant',     icon:'↺', group:'Rebirth',  desc:'Complete 3 rebirths.',                      test:g=>g.state.life.rebirths>=3,  prog:g=>[g.state.life.rebirths,3] },
+  { id:'recycler',    name:'Recycler',           icon:'↺', group:'Rebirth',  desc:'Complete 10 rebirths.',                     test:g=>g.state.life.rebirths>=10, prog:g=>[g.state.life.rebirths,10] },
+  // --- oddities ---
+  { id:'fieldkit',    name:'Field Kit',          icon:'✚', group:'Oddities', desc:'Own at least one of every supply item.',    test:g=>ITEMS.every(i=>(g.state.items[i.id]||0)>0), prog:g=>[ITEMS.filter(i=>(g.state.items[i.id]||0)>0).length, ITEMS.length] },
+  { id:'saboteur',    name:'Saboteur',           icon:'▦', group:'Oddities', desc:'Use 50 supplies in battle.',                test:g=>g.state.life.itemsUsed>=50, prog:g=>[g.state.life.itemsUsed,50] },
+  { id:'netrunner',   name:'Net Runner',         icon:'⌗', group:'Oddities', desc:'Stun 3 enemies with a single Paralysis Net.',test:g=>g.state.life.netTriples>=1 },
+  { id:'acepilot',    name:'Ace Pilot',          icon:'△', group:'Oddities', desc:'Take your ace unit to level 25.',           test:g=>g.state.life.maxHeroLevel>=25, prog:g=>[g.state.life.maxHeroLevel,25] },
+];
+const ACH_BY_ID = {};
+ACHIEVEMENTS.forEach(a => { ACH_BY_ID[a.id] = a; });
+
+const LIFE_DEFAULT = {
+  kills: 0, wins: 0, losses: 0, bosses: 0, majorBosses: 0, rebirths: 0,
+  credits: 0, itemsUsed: 0, maxSector: 1, maxTier: 0, streak: 0, bestStreak: 0,
+  perfectWins: 0, netTriples: 0, maxOwned: 0, maxUnitLevel: 1, maxHeroLevel: 1,
+  kinds: {},
+};
+
 const ITEM_BY_ID = {};
 ITEMS.forEach(i => { ITEM_BY_ID[i.id] = i; });
 
@@ -162,6 +209,8 @@ class Game {
       salvageUpgrades: {},
       runTier: 0,
       runFrontier: 1,
+      achievements: {},
+      life: JSON.parse(JSON.stringify(LIFE_DEFAULT)),
     };
     UNITS.forEach(u => { this.state.units[u.id] = { count: 0, level: 1 }; });
     this.battle = null;
@@ -187,6 +236,7 @@ class Game {
         items: { freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 },
         itemLevels: { net: 1 }, buffs: { xp: 0, atk: 0 }, blueprints: {}, lastDrops: [],
         salvage: 0, prestiges: 0, salvageUpgrades: {}, runTier: 0, runFrontier: 1,
+        achievements: {}, life: JSON.parse(JSON.stringify(LIFE_DEFAULT)),
       };
       this.state = Object.assign(base, s);
       this.state.speed = 1;
@@ -200,6 +250,9 @@ class Game {
       this.state.salvageUpgrades = s.salvageUpgrades || {};
       this.state.runTier = s.runTier === undefined ? this.state.tierIndex : s.runTier;
       this.state.runFrontier = s.runFrontier === undefined ? this.state.battleNumber : s.runFrontier;
+      this.state.achievements = s.achievements || {};
+      this.state.life = Object.assign(JSON.parse(JSON.stringify(LIFE_DEFAULT)), s.life || {});
+      if (!this.state.life.kinds) this.state.life.kinds = {};
       // offline income
       const elapsed = clamp((Date.now() - (s.lastTick || Date.now())) / 1000, 0, 8 * 3600);
       const gain = this.idlePerSec() * elapsed * 0.6;
@@ -222,6 +275,36 @@ class Game {
   skill(id) { return this.state.skills[id] || 0; }
   atkBuff() { return (this.state.buffs && this.state.buffs.atk > 0) ? 1.5 : 1; }
   xpBuff() { return (this.state.buffs && this.state.buffs.xp > 0) ? 1.5 : 1; }
+
+  /* ---------- achievements ---------- */
+  bump(key, n) {
+    const l = this.state.life;
+    l[key] = (l[key] || 0) + (n === undefined ? 1 : n);
+    this.checkAchievements();
+  }
+  peak(key, value) {
+    const l = this.state.life;
+    if (value > (l[key] || 0)) { l[key] = value; this.checkAchievements(); }
+  }
+  achievementCount() { return Object.keys(this.state.achievements || {}).length; }
+  checkAchievements() {
+    const got = [];
+    for (const a of ACHIEVEMENTS) {
+      if (this.state.achievements[a.id]) continue;
+      let ok = false;
+      try { ok = !!a.test(this); } catch (e) { ok = false; }
+      if (ok) {
+        this.state.achievements[a.id] = Date.now();
+        got.push(a);
+        this.log('MEDAL — ' + a.name + ' · ' + a.desc, 'tier');
+      }
+    }
+    if (got.length) {
+      this.newAchievements = (this.newAchievements || []).concat(got);
+      this.save();
+    }
+    return got;
+  }
 
   /* ---------- salvage (prestige) ---------- */
   salvageUpg(id) { return (this.state.salvageUpgrades && this.state.salvageUpgrades[id]) || 0; }
@@ -270,6 +353,8 @@ class Game {
       prestiges: this.state.prestiges + 1,
       autoBattleOwned: this.state.autoBattleOwned,
       bossesKilled: this.state.bossesKilled,
+      achievements: this.state.achievements,
+      life: this.state.life,
     };
     const hs = this.salvageUpg('tier');
     const chest = this.salvageUpg('start');
@@ -288,6 +373,7 @@ class Game {
     this.state.lastDrops = [];
     this.battle = null;
 
+    this.bump('rebirths');
     this.log('ARMY SCRAPPED. Rebirth #' + this.state.prestiges + ' — banked ' + gain + ' salvage.', 'tier');
     if (hs > 0) this.log('Head Start: beginning at ' + TIERS[this.state.tierIndex].name + ' tier.', 'good');
     if (chest > 0) this.log('War Chest: starting with ' + fmt(this.state.money) + ' credits.', 'good');
@@ -328,6 +414,7 @@ class Game {
         this.state.tierIndex = ti;
         this.state.seenTiers = ti + 1;
         this.state.runTier = Math.max(this.state.runTier || 0, ti);
+        this.peak('maxTier', ti);
         this.log('TIER UNLOCKED — ' + TIERS[ti].name + '. New chassis available in the hangar.', 'tier');
       }
     }
@@ -412,6 +499,8 @@ class Game {
     if (this.state.money < c) return false;
     this.state.money -= c;
     this.state.units[id].count++;
+    this.state.life.kinds[id] = true;
+    this.peak('maxOwned', this.totalOwned());
     this.log('Purchased ' + UNIT_BY_ID[id].name + ' (' + this.state.units[id].count + ' owned).', 'good');
     this.emit();
     return true;
@@ -422,6 +511,7 @@ class Game {
     if (this.state.heroLevel >= 50) return false;
     this.state.money -= c;
     this.state.heroLevel++;
+    this.peak('maxHeroLevel', this.state.heroLevel);
     if (this.state.heroLevel % 5 === 0) this.log('Hero frame evolved — MK' + Math.floor(this.state.heroLevel / 5) + ' chassis online.', 'tier');
     this.emit();
     return true;
@@ -433,6 +523,7 @@ class Game {
     if (this.state.money < c) return false;
     this.state.money -= c;
     st.level++;
+    this.peak('maxUnitLevel', st.level);
     this.emit();
     return true;
   }
@@ -478,6 +569,7 @@ class Game {
     if ((this.state.items[id] || 0) <= 0) { this.log('No ' + def.name + ' left — buy more in the hangar.', 'bad'); this.emit(); return false; }
     if (!b.applyItem(id, target)) return false;
     this.state.items[id]--;
+    this.bump('itemsUsed');
     this.log(def.name + ' fired — ' + def.desc.split(' —')[0] + '.', 'good');
     this.save();
     this.emit();
@@ -555,9 +647,15 @@ class Game {
         this.state.trophies += troph;
         this.state.bossesKilled++;
         this.state.pendingBoss = null;
+        this.state.life.bosses += 1;
+        if (result.kind === 'major') this.state.life.majorBosses += 1;
+        this.state.life.streak += 1;
+        this.state.life.bestStreak = Math.max(this.state.life.bestStreak, this.state.life.streak);
+        this.checkAchievements();
         const r = this.battleRewards(this.state.stage, true, result.kind);
         this.state.money += r.money;
         this.state.xp += r.xp;
+        this.state.life.credits += r.money;
         this.state.wins += result.kind === 'major' ? 3 : 1;
         this.checkLevelUp();
         this.log('Boss down! +' + troph + ' trophies, +' + fmt(r.money) + ' credits, +' + fmt(r.xp) + ' XP.', 'good');
@@ -576,11 +674,17 @@ class Game {
       this.state.money += r.money;
       this.state.xp += r.xp;
       this.state.wins++;
+      this.state.life.wins += 1;
+      this.state.life.streak += 1;
+      this.state.life.bestStreak = Math.max(this.state.life.bestStreak, this.state.life.streak);
+      if (result.perfect) this.state.life.perfectWins += 1;
+      this.state.life.credits += r.money;
       const beatCurrent = this.state.stage >= this.state.battleNumber;
       if (beatCurrent) {
         this.state.battleNumber = this.state.stage + 1;
         this.state.stage = this.state.battleNumber;
         this.state.runFrontier = Math.max(this.state.runFrontier || 1, this.state.battleNumber);
+        this.peak('maxSector', this.state.battleNumber);
       }
       this.checkLevelUp();
       this.log('Sector ' + result.stage + ' cleared. +' + fmt(r.money) + ' credits, +' + fmt(r.xp) + ' XP.', 'good');
@@ -594,8 +698,11 @@ class Game {
         this.log('Mini-boss signature detected. Boss battle available.', 'tier');
       }
     } else {
+      this.state.life.losses += 1;
+      this.state.life.streak = 0;
       this.log('Squad wiped in sector ' + result.stage + '. Buy reinforcements or farm an earlier sector.', 'bad');
     }
+    this.checkAchievements();
     this.save(); this.emit();
   }
   afterWinBoss() { /* hook for ui */ }
@@ -653,6 +760,7 @@ class Game {
   tick(dt) {
     const gain = this.idlePerSec() * dt;
     this.state.money += gain;
+    if (this.state.life) this.state.life.credits += gain;
     const b = this.state.buffs;
     if (b) {
       b.xp = Math.max(0, b.xp - dt);
@@ -680,6 +788,7 @@ class FrontBattle {
     this.resultTimer = 0;
     this.manual = false;
     this.blocking = false;
+    this.playerDeaths = 0;
     this.build();
   }
 
@@ -896,6 +1005,8 @@ class FrontBattle {
     u.hp = 0; u.dead = true;
     this.fx.push({ type: 'boom', x: u.x, lane: u.lane, t: 0, life: 0.5 });
     if (u.isHero) this.game.log('Your hero has been destroyed.', 'bad');
+    if (u.side === 'e') this.game.bump('kills');
+    else this.playerDeaths++;
   }
   applyItem(id, target) {
     if (!target || target.dead) return false;
@@ -917,6 +1028,8 @@ class FrontBattle {
         .filter(e => Math.abs(e.x - target.x) < (def.splash || 140))
         .slice(0, def.maxTargets || 3)
         .forEach(e => { e.freeze = Math.max(e.freeze || 0, dur); });
+      const hitCount = this.alive('e').filter(e => Math.abs(e.x - target.x) < (def.splash || 140)).length;
+      if (hitCount >= 3) this.game.bump('netTriples');
       this.fx.push({ type: 'ring', x: target.x, lane: target.lane, r: 10, max: def.splash || 140, t: 0, life: 0.6, color: def.color });
       return true;
     }
@@ -975,6 +1088,8 @@ class FrontBattle {
       target.hp = 0; target.dead = true;
       this.fx.push({ type: 'boom', x: target.x, lane: target.lane, t: 0, life: 0.5 });
       if (target.isHero) this.game.log('Your hero has been destroyed.', 'bad');
+      if (target.side === 'e') this.game.bump('kills');
+      else this.playerDeaths++;
     }
   }
 
@@ -998,7 +1113,7 @@ class FrontBattle {
     if (this.over) return;
     this.over = true;
     this.win = win;
-    this.game.onBattleEnd({ mode: 'front', win, stage: this.stage });
+    this.game.onBattleEnd({ mode: 'front', win, stage: this.stage, perfect: this.playerDeaths === 0 });
   }
 }
 
@@ -1265,6 +1380,7 @@ class BossBattle {
   killMinion(m) {
     if (m.dead) return;
     m.dead = true; m.hp = 0;
+    this.game.bump('kills');
     this.fx.push({ type: 'boom', x: m.x, y: m.y - 10, t: 0, life: 0.45 });
   }
   applyItem(id, target) {
@@ -1287,6 +1403,7 @@ class BossBattle {
         .slice(0, def.maxTargets || 3);
       if (!pool.length) return false;
       pool.forEach(t => { t.freeze = Math.max(t.freeze || 0, dur); });
+      if (pool.length >= 3) this.game.bump('netTriples');
       this.fx.push({ type: 'ring', x: target.x, y: target.y - 20, r: 12, max: def.splash || 140, t: 0, life: 0.6, color: def.color });
       return true;
     }
@@ -1332,4 +1449,4 @@ class BossBattle {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { Game, FrontBattle, BossBattle, TIERS, UNITS, SKILLS, fmt, xpForLevel };
+if (typeof module !== 'undefined') module.exports = { Game, FrontBattle, BossBattle, TIERS, UNITS, SKILLS, ITEMS, ACHIEVEMENTS, SALVAGE_UPGRADES, LIFE_DEFAULT, fmt, xpForLevel };
