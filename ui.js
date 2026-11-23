@@ -404,6 +404,14 @@ class UI {
     });
 
     // modal
+    document.getElementById('team-btn').addEventListener('click', () => this.openTeam());
+    document.getElementById('team-save').addEventListener('click', () => this.saveTeam());
+    document.getElementById('team-clear').addEventListener('click', () => this.clearTeamUI());
+    document.getElementById('team-cancel').addEventListener('click', () => this.closeTeam());
+    document.getElementById('team-modal').addEventListener('click', e => {
+      if (e.target.id === 'team-modal') this.closeTeam();
+    });
+
     document.getElementById('modal-cancel').addEventListener('click', () => this.hideModal());
     document.getElementById('modal-ok').addEventListener('click', () => {
       const fn = this.modalAction;
@@ -616,7 +624,7 @@ class UI {
       tb.classList.add('ready');
     }
 
-    document.getElementById('field-count').textContent = g.fieldedUnits().length;
+    document.getElementById('field-count').textContent = g.fieldedUnits().length + '/' + g.fieldCap();
 
     // cards
     const ti = s.tierIndex;
@@ -791,6 +799,107 @@ class UI {
         ? 'TAP ' + (armedDef.target === 'ally' ? 'ONE OF YOUR UNITS' : 'A HOSTILE') + ' TO DEPLOY ' + armedDef.name.toUpperCase()
         : 'TAP AN ITEM, THEN TAP A TARGET';
     hint.classList.toggle('hot', !!this.armedItem && live);
+  }
+
+  /* ---------- team picker ---------- */
+  openTeam() {
+    const g = this.game;
+    const owned = UNITS.filter(u => g.state.units[u.id].count > 0);
+    if (!owned.length) { this.toast('Buy a unit first.'); return; }
+    const cur = {};
+    if (g.teamIsCustom()) Object.keys(g.state.team).forEach(id => { cur[id] = g.state.team[id]; });
+    this.pendingTeam = cur;
+    document.getElementById('team-modal').classList.remove('hidden');
+    this.renderTeamList();
+  }
+
+  closeTeam() {
+    document.getElementById('team-modal').classList.add('hidden');
+  }
+
+  renderTeamList() {
+    const g = this.game;
+    const cap = g.fieldCap();
+    const total = Object.keys(this.pendingTeam).reduce((a, id) => a + (this.pendingTeam[id] || 0), 0);
+    document.getElementById('tm-sub').innerHTML =
+      'Your ace always deploys. Pick up to <b>' + cap + '</b> mechs · ' +
+      '<b class="' + (total >= cap ? 'tm-full' : '') + '">' + total + '/' + cap + '</b>' +
+      (g.state.prestiges ? ' (' + BASE_FIELD_CAP + ' + ' + g.state.prestiges + ' from rebirths)' : '');
+    const list = document.getElementById('team-list');
+    list.innerHTML = '';
+    UNITS.forEach(u => {
+      const st = g.state.units[u.id];
+      if (!(st.count > 0)) return;
+      const n = this.pendingTeam[u.id] || 0;
+      const row = document.createElement('div');
+      row.className = 'team-row' + (n ? ' picked' : '');
+      row.innerHTML =
+        '<canvas width="60" height="72"></canvas>' +
+        '<div class="tr-body">' +
+          '<div class="tr-name">' + u.name + '</div>' +
+          '<div class="tr-own">owned ×' + st.count + '</div>' +
+        '</div>' +
+        '<button class="step dec" data-id="' + u.id + '"' + (n ? '' : ' disabled') + '>−</button>' +
+        '<span class="tr-n">' + n + '</span>' +
+        '<button class="step inc" data-id="' + u.id + '"' + ((n >= st.count || total >= cap) ? ' disabled' : '') + '>+</button>';
+      list.appendChild(row);
+      // mini portrait
+      const cv = row.querySelector('canvas'), ctx = cv.getContext('2d');
+      drawMech(ctx, 30, 64, 0.95, palFor(u.tier, 'p'), { kind: u.id, anim: 0, walking: false, dir: 1 });
+    });
+    list.querySelectorAll('.step').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const cur = this.pendingTeam[id] || 0;
+        const capNow = g.fieldCap();
+        const totNow = Object.keys(this.pendingTeam).reduce((a, k) => a + (this.pendingTeam[k] || 0), 0);
+        if (btn.classList.contains('inc')) {
+          if (totNow >= capNow) { this.toast('Line is full — ' + capNow + ' slots. Rebirth for more.'); return; }
+          this.pendingTeam[id] = Math.min(cur + 1, g.state.units[id].count);
+        } else if (cur > 0) {
+          this.pendingTeam[id] = cur - 1;
+          if (this.pendingTeam[id] <= 0) delete this.pendingTeam[id];
+        }
+        this.renderTeamList();
+      });
+    });
+  }
+
+  saveTeam() {
+    const t = this.game.setTeam(this.pendingTeam || {});
+    this.closeTeam();
+    this.refreshAll(false);
+    const names = [];
+    if (t) Object.keys(t).forEach(id => names.push(t[id] + '× ' + UNIT_BY_ID[id].name));
+    this.toast(names.length ? 'Team set: ' + names.join(', ') : 'Back to auto selection.');
+    this.refreshHangar(false);
+  }
+
+  clearTeamUI() {
+    this.game.clearTeam();
+    this.closeTeam();
+    this.refreshAll(false);
+    this.refreshHangar(false);
+    this.toast('Auto selection restored — the strongest mechs deploy.');
+  }
+
+  refreshTeamSummary() {
+    const el = document.getElementById('team-summary');
+    if (!el) return;
+    const g = this.game;
+    const cap = g.fieldCap();
+    if (!g.teamIsCustom()) {
+      el.textContent = 'TEAM · AUTO — strongest ' + Math.min(cap, g.fieldedUnits().length) + '/' + cap + ' deploy';
+      return;
+    }
+    const ready = g.teamReady();
+    if (!ready || !ready.total) {
+      el.textContent = 'TEAM · AUTO — strongest ' + Math.min(cap, g.fieldedUnits().length) + '/' + cap + ' deploy';
+      return;
+    }
+    el.textContent = 'TEAM · ' +
+      ready.parts.map(p => p.n + '× ' + UNIT_BY_ID[p.id].name).join(' · ') +
+      ' (' + ready.total + '/' + cap + ')';
   }
 
   /* ---------- medals ---------- */
@@ -1059,6 +1168,7 @@ class UI {
     this.refreshStage();
     this.refreshShop();
     this.refreshItemBar();
+    this.refreshTeamSummary();
     this.refreshSalvage();
     this.refreshRebirth();
     this.refreshAwards();
@@ -1124,6 +1234,9 @@ class UI {
     const det = document.getElementById('detonate-btn');
     const hasDet = b && b.mode === 'front' && b.units.some(u => !u.dead && u.role === 'suicide' && !u.manualTriggered);
     det.classList.toggle('hidden', !hasDet);
+    const tb = document.getElementById('team-btn');
+    const ready = g.teamReady();
+    tb.textContent = ready && ready.total ? 'TEAM ' + ready.total : 'TEAM';
     const fight = document.getElementById('fight-btn');
     fight.textContent = b && !b.over ? 'RESTART' : 'DEPLOY';
   }
@@ -1217,7 +1330,7 @@ class UI {
       this.acc = 0;
       this.refreshHud();
       if (this.screen === 'hangar') { this.refreshHangar(false); this.refreshShop(); }
-      if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); this.refreshItemBar(); }
+      if (this.screen === 'battle') { this.refreshStage(); this.refreshControls(); this.refreshItemBar(); this.refreshTeamSummary(); }
       if (this.screen === 'skills') { this.refreshSkills(); this.refreshSalvage(); }
       if (this.screen === 'medals') this.refreshAwards();
       this.drainMedals();

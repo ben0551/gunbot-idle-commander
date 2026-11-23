@@ -68,8 +68,10 @@
           <div class="dim tiny" id="stage-best">best 1</div>
         </div>
         <button class="btn tiny" id="stage-next">▶</button>
+        <button class="btn cyan" id="team-btn">TEAM</button>
         <button class="btn fight" id="fight-btn">DEPLOY</button>
       </div>
+      <div id="team-summary" class="team-summary"></div>
 
       <div id="boss-banner" class="boss-banner hidden">
         <span>SIGNATURE DETECTED</span>
@@ -169,6 +171,19 @@
       <div class="footpad"></div>
     </section>
   </main>
+
+  <div id="team-modal" class="modal hidden">
+    <div class="modal-card team-card">
+      <div class="modal-title">SET TEAM</div>
+      <div class="tm-sub" id="tm-sub"></div>
+      <div id="team-list" class="team-list"></div>
+      <div class="modal-actions">
+        <button class="btn ctrl" id="team-clear">AUTO</button>
+        <button class="btn ctrl" id="team-cancel">CANCEL</button>
+        <button class="btn gold" id="team-save">SAVE TEAM</button>
+      </div>
+    </div>
+  </div>
 
   <div id="achv-toast" class="achv-toast"><span class="at-icon" id="at-icon">◈</span><div><div class="at-title">MEDAL EARNED</div><div class="at-name" id="at-name"></div></div></div>
 

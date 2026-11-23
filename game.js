@@ -131,7 +131,7 @@ const ITEM_BY_ID = {};
 ITEMS.forEach(i => { ITEM_BY_ID[i.id] = i; });
 
 const SAVE_KEY = 'gunbot-idle-v1';
-const FIELD_CAP = 9;
+const BASE_FIELD_CAP = 9;
 const AUTOBATTLE_COST = 100;
 
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -211,6 +211,7 @@ class Game {
       runFrontier: 1,
       achievements: {},
       life: JSON.parse(JSON.stringify(LIFE_DEFAULT)),
+      team: null,
     };
     UNITS.forEach(u => { this.state.units[u.id] = { count: 0, level: 1 }; });
     this.battle = null;
@@ -236,7 +237,7 @@ class Game {
         items: { freeze: 0, fire: 0, insanity: 0, net: 0, heal: 0 },
         itemLevels: { net: 1 }, buffs: { xp: 0, atk: 0 }, blueprints: {}, lastDrops: [],
         salvage: 0, prestiges: 0, salvageUpgrades: {}, runTier: 0, runFrontier: 1,
-        achievements: {}, life: JSON.parse(JSON.stringify(LIFE_DEFAULT)),
+        achievements: {}, life: JSON.parse(JSON.stringify(LIFE_DEFAULT)), team: null,
       };
       this.state = Object.assign(base, s);
       this.state.speed = 1;
@@ -253,6 +254,7 @@ class Game {
       this.state.achievements = s.achievements || {};
       this.state.life = Object.assign(JSON.parse(JSON.stringify(LIFE_DEFAULT)), s.life || {});
       if (!this.state.life.kinds) this.state.life.kinds = {};
+      if (!s.team) this.state.team = null;
       // offline income
       const elapsed = clamp((Date.now() - (s.lastTick || Date.now())) / 1000, 0, 8 * 3600);
       const gain = this.idlePerSec() * elapsed * 0.6;
@@ -355,6 +357,7 @@ class Game {
       bossesKilled: this.state.bossesKilled,
       achievements: this.state.achievements,
       life: this.state.life,
+      team: this.state.team,
     };
     const hs = this.salvageUpg('tier');
     const chest = this.salvageUpg('start');
@@ -587,8 +590,64 @@ class Game {
     return true;
   }
 
-  /* units actually fielded, strongest first */
+  /* every rebirth buys one extra slot on the line */
+  fieldCap() { return BASE_FIELD_CAP + (this.state.prestiges || 0); }
+  teamIsCustom() { return !!(this.state.team && Object.keys(this.state.team).length); }
+  teamTotal() {
+    const t = this.state.team || {};
+    return Object.keys(t).reduce((a, id) => a + (t[id] || 0), 0);
+  }
+  /* what the saved team can actually deploy right now (clamped to what you own) */
+  teamReady() {
+    if (!this.teamIsCustom()) return null;
+    let total = 0;
+    const parts = [];
+    Object.keys(this.state.team).forEach(id => {
+      const st = this.state.units[id];
+      if (!st) return;
+      const avail = Math.min(st.count, this.state.team[id] || 0);
+      if (avail > 0) { total += avail; parts.push({ id, n: avail }); }
+    });
+    return { total, parts };
+  }
+
+  setTeam(map) {
+    const cap = this.fieldCap();
+    const out = {};
+    let total = 0;
+    UNITS.forEach(u => {
+      if (!map[u.id]) return;
+      if (!(this.state.units[u.id].count > 0)) return;
+      const n = Math.min(Math.max(0, Math.floor(map[u.id])), this.state.units[u.id].count, cap - total);
+      if (n > 0) { out[u.id] = n; total += n; }
+    });
+    this.state.team = total ? out : null;
+    this.save(); this.emit();
+    return this.state.team;
+  }
+  clearTeam() {
+    this.state.team = null;
+    this.save(); this.emit();
+    return true;
+  }
+
+  /* units actually fielded: the player's team when set, otherwise strongest first */
   fieldedUnits() {
+    const cap = this.fieldCap();
+
+    if (this.teamIsCustom()) {
+      const list = [];
+      const t = this.state.team;
+      for (const id of Object.keys(t)) {
+        const st = this.state.units[id];
+        if (!st || !(st.count > 0)) continue;
+        const n = Math.min(st.count, t[id] || 0, cap - list.length);
+        for (let i = 0; i < n; i++) list.push({ id, stats: this.unitStats(id) });
+        if (list.length >= cap) break;
+      }
+      if (list.length) return list;
+    }
+
     const list = [];
     const supportRoles = { healer: 1, buffer: 1, debuff: 1, trapper: 1 };
     const scored = UNITS
@@ -607,9 +666,9 @@ class Game {
     for (const { u } of scored) {
       if (u.role === 'suicide') continue;
       const st = this.state.units[u.id];
-      const n = Math.min(st.count, FIELD_CAP - list.length);
+      const n = Math.min(st.count, cap - list.length);
       for (let i = 0; i < n; i++) list.push({ id: u.id, stats: this.unitStats(u.id) });
-      if (list.length >= FIELD_CAP) break;
+      if (list.length >= cap) break;
     }
     return list;
   }

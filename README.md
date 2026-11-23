@@ -68,6 +68,11 @@ Or just open `index.html` directly — `file://` works, saves live in `localStor
   Measured with the headless bot: first run reaches Lava in ~155 min, the second run takes ~120 min
   on the same investment — and it compounds from there.
 
+- **Team selection** — `SET TEAM` on the battle page lets you pick exactly which mechs deploy,
+  so a healer can actually make the line instead of being squeezed out by the auto-picker. The
+  team sticks until you reset it to AUTO. Line limit starts at **9 and gains +1 per rebirth**
+  (shown as `7/12` after three rebirths). Your ace always deploys and doesn't take a slot.
+
 - **Field supplies** — bought with credits in the hangar, carried into any battle. Arm one, then
   tap the target:
   - **Cryo Grenade** (400 ₡) — freezes one enemy solid for 4.5 s: no movement, no attacks.
