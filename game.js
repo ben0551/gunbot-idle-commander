@@ -29,7 +29,7 @@ const UNITS = [
   { id:'archmedic', name:'Archmedic', tier:6, cost:20000,  role:'healer', base:{hp:230, atk:8,  def:14, spd:34, range:160, aspd:0.95}, desc:'ADVANCED SUPPORT — heals twice as often, hits harder.' },
   { id:'jammer',    name:'Jammer',    tier:6, cost:30000,  role:'debuff', base:{hp:200, atk:10, def:14, spd:34, range:180, aspd:2.00}, desc:'DEBUFF — slows enemies and cuts their attack.' },
   { id:'barricade', name:'Barricade', tier:6, cost:42000,  role:'tank',   base:{hp:440, atk:14, def:32, spd:24, range:60,  aspd:1.60}, desc:'TRAP PATH B — deploys barrier traps that stall the wave.' },
-  { id:'detonator', name:'Detonator', tier:7, cost:70000,  role:'suicide',base:{hp:90,  atk:0,  def:4,  spd:52, range:40,  aspd:99},   desc:'SUICIDE — manual trigger only. Walks in and detonates.' },
+  { id:'detonator', name:'Detonator', tier:7, cost:70000,  role:'suicide',base:{hp:90,  atk:0,  def:4,  spd:52, range:40,  aspd:99},   desc:'SUICIDE — charges the nearest hostile and detonates on impact. DETONATE sets them all off early.' },
   { id:'foundry',   name:'Foundry',   tier:7, cost:100000, role:'income', base:{hp:240, atk:0,  def:12, spd:20, range:0,   aspd:99},   desc:'INCOME — prints money every second. Killable in battle.' },
   { id:'bastion',   name:'Bastion',   tier:8, cost:180000, role:'reflect',base:{hp:400, atk:26, def:36, spd:28, range:50,  aspd:1.20}, desc:'REFLECTION DEFENDER — returns 35% of melee damage taken.' },
 ];
@@ -615,10 +615,11 @@ class Game {
     const cap = this.fieldCap();
     const out = {};
     let total = 0;
+    const src = map || {};
     UNITS.forEach(u => {
-      if (!map[u.id]) return;
+      if (!src[u.id]) return;
       if (!(this.state.units[u.id].count > 0)) return;
-      const n = Math.min(Math.max(0, Math.floor(map[u.id])), this.state.units[u.id].count, cap - total);
+      const n = Math.min(Math.max(0, Math.floor(src[u.id])), this.state.units[u.id].count, cap - total);
       if (n > 0) { out[u.id] = n; total += n; }
     });
     this.state.team = total ? out : null;
@@ -853,7 +854,7 @@ class FrontBattle {
 
   build() {
     const g = this.game;
-    const playerSpots = this.spawnSlots(9, 120, 1);
+    const playerSpots = this.spawnSlots(this.game.fieldCap(), 120, 1);
     const heroSt = g.heroStats();
     const hero = {
       side: 'p', id: 'hero', name: 'Hero', kind: 'hero', role: 'hero',
@@ -936,7 +937,6 @@ class FrontBattle {
       }
       if (u.role === 'income') continue;
       u.cd -= dt;
-      if (u.role === 'suicide' && !u.manualTriggered) continue;
 
       const turned = u.insane > 0;
       const foes = this.alive(turned ? u.side : (u.side === 'p' ? 'e' : 'p')).filter(f => f !== u);
@@ -952,6 +952,21 @@ class FrontBattle {
           u.cd = u.aspd * 0.8;
         }
         u.anim += dt * 8;
+        continue;
+      }
+
+      // bombers charge the nearest hostile and go off on impact
+      if (u.role === 'suicide' && !u.manualTriggered) {
+        const t = this.nearest(u, foes);
+        if (t) {
+          const d = Math.abs(t.x - u.x);
+          if (d <= 30) {
+            this.explodeSuicide(u);
+          } else {
+            u.x += (t.x > u.x ? 1 : -1) * u.spd * dt;
+            u.anim += dt * 14;
+          }
+        }
         continue;
       }
 
@@ -1152,17 +1167,25 @@ class FrontBattle {
     }
   }
 
+  explodeSuicide(u) {
+    const dmg = 900 + this.stage * 120;
+    this.fx.push({ type: 'ring', x: u.x, lane: u.lane, r: 10, max: 220, t: 0, life: 0.6, color: '#ff4d4d' });
+    this.fx.push({ type: 'boom', x: u.x, lane: u.lane, t: 0, life: 0.6 });
+    this.alive('e').forEach(f => {
+      if (Math.abs(f.x - u.x) < 170) this.damage(f, dmg, null, 'explosive');
+    });
+    u.manualTriggered = true;
+    u.hp = 0;
+    u.dead = true;
+  }
+
   detonate() {
     let any = false;
     for (const u of this.units) {
       if (u.dead || u.role !== 'suicide' || u.manualTriggered) continue;
       u.manualTriggered = true;
       any = true;
-      const foes = this.alive('e');
-      this.fx.push({ type: 'ring', x: u.x, lane: u.lane, r: 10, max: 220, t: 0, life: 0.6, color: '#ff4d4d' });
-      this.fx.push({ type: 'boom', x: u.x, lane: u.lane, t: 0, life: 0.6 });
-      foes.forEach(f => { if (Math.abs(f.x - u.x) < 170) this.damage(f, 900 + this.stage * 120, null, 'explosive'); });
-      u.dead = true;
+      this.explodeSuicide(u);
     }
     if (!any) this.game.log('No Detonators in the field.', 'bad');
     return any;
@@ -1222,7 +1245,7 @@ class BossBattle {
         x: 500 + Math.cos(angle) * 260, y: 480 - Math.sin(angle) * 60,
         hp: f.stats.hp, maxHp: f.stats.hp, atk: f.stats.atk, cd: Math.random(),
         id: f.id, r: 14, dead: false, flash: 0, anim: Math.random() * 6,
-        tier: UNIT_BY_ID[f.id].tier, role: f.stats.role,
+        tier: UNIT_BY_ID[f.id].tier, role: f.stats.role, used: false,
       });
     });
     // escort minions — these are what the field items are aimed at
@@ -1297,6 +1320,22 @@ class BossBattle {
     // allies fire
     for (const a of this.allies) {
       if (a.dead) continue;
+      // bombers launched from the line fly straight at the boss
+      if (a.role === 'suicide' && !a.used) {
+        const bd = Math.hypot(b.x - a.x, b.y - a.y);
+        if (bd < b.r + 26) {
+          a.used = true; a.dead = true; a.hp = 0;
+          this.damageBoss(this.boss.maxHp * 0.06 + 600);
+          this.fx.push({ type: 'ring', x: a.x, y: a.y - 10, r: 10, max: 160, t: 0, life: 0.5, color: '#ff4d4d' });
+          this.fx.push({ type: 'boom', x: a.x, y: a.y - 10, t: 0, life: 0.6 });
+        } else {
+          const ang = Math.atan2(b.y - a.y, b.x - a.x);
+          a.x += Math.cos(ang) * 260 * dt;
+          a.y += Math.sin(ang) * 260 * dt;
+          a.anim += dt * 12;
+        }
+        continue;
+      }
       a.cd -= dt;
       a.flash = Math.max(0, a.flash - dt * 4);
       a.anim += dt * 3;
